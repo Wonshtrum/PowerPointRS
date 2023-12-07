@@ -1,14 +1,42 @@
+// #![no_std]
+
+// #[macro_use]
+// extern crate alloc;
+
+// pub use alloc::vec::Vec;
+// pub use core::{fmt, option::Option, result::Result};
+use std::{fmt, process::exit};
+
+mod entry;
+mod experiments;
+mod wasm;
+
+#[macro_export]
+macro_rules! console {
+    ($($t:tt)*) => {
+        crate::wasm::pptrs::log(&format_args!($($t)*).to_string());
+    };
+}
+
+macro_rules! todo {
+    ($($t:tt)*) => {{
+        console!($($t)*);
+        unreachable!();
+    }};
+}
+
 //=========================================================
 // Shape
 
 #[derive(Clone, Copy)]
 pub enum Visibility {
-    Unknown,
     Hidden,
     Visible,
+    Unknown,
 }
 
 #[derive(Clone)]
+#[repr(C)]
 pub struct ShapeDynState {
     pub x: f32,
     pub y: f32,
@@ -19,7 +47,7 @@ pub struct ShapeDynState {
 
 impl ShapeDynState {
     pub fn contains(&self, x: f32, y: f32) -> bool {
-        x >= self.x && y >= self.y && x <= self.x + self.w && self.y <= self.y + self.h
+        x >= self.x && y >= self.y && x <= self.x + self.w && y <= self.y + self.h
     }
 
     pub fn is_visible(&self) -> bool {
@@ -28,6 +56,7 @@ impl ShapeDynState {
 }
 
 #[derive(Clone)]
+#[repr(C)]
 pub struct Color {
     pub r: u8,
     pub g: u8,
@@ -40,18 +69,27 @@ impl Color {
     pub const RED: Self = Self::from_u32(0xFF0000);
     pub const GREEN: Self = Self::from_u32(0x00FF00);
     pub const BLUE: Self = Self::from_u32(0x0000FF);
+    const fn new(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b }
+    }
     const fn from_u32(c: u32) -> Self {
         Self {
-            r: (c & 0xFF0000 >> 16) as u8,
-            g: (c & 0x00FF00 >> 8) as u8,
-            b: (c & 0x0000FF >> 0) as u8,
+            r: ((c & 0xFF0000) >> 16) as u8,
+            g: ((c & 0x00FF00) >> 8) as u8,
+            b: ((c & 0x0000FF) >> 0) as u8,
         }
+    }
+    const fn grey(c: u8) -> Self {
+        Self { r: c, g: c, b: c }
     }
 }
 
 #[derive(Clone)]
+#[repr(C)]
 pub struct ShapeConstState {
     pub color: Color,
+    pub x: f32,
+    pub y: f32,
 }
 
 #[derive(Clone)]
@@ -60,8 +98,8 @@ pub struct ShapeState {
     pub state_const: ShapeConstState,
 }
 
-impl std::fmt::Debug for ShapeState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for ShapeState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
             "State({}, {}, {}, {})",
             self.state_dyn.x, self.state_dyn.y, self.state_dyn.w, self.state_dyn.h,
@@ -69,13 +107,29 @@ impl std::fmt::Debug for ShapeState {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct Z(pub isize, pub isize, pub isize);
+
+#[macro_export]
+macro_rules! z {
+    ($a:expr) => {
+        crate::Z($a as isize, 0, 0)
+    };
+    ($a:expr, $b:expr) => {
+        crate::Z($a as isize, $b as isize, 0)
+    };
+    ($a:expr, $b:expr, $c:expr) => {
+        crate::Z($a as isize, $b as isize, $c as isize)
+    };
+}
+
 #[derive(Clone, Debug)]
 pub enum Shape {
-    Shape { z: usize, state: ShapeState },
-    Group { z: usize, shapes: Vec<Shape> },
+    Shape { z: Z, state: ShapeState },
+    Group { z: Z, shapes: Vec<Shape> },
 }
 impl Shape {
-    pub fn with_float(x: f32, y: f32, z: usize, w: f32, h: f32, color: Color) -> Shape {
+    pub fn with_float(x: f32, y: f32, z: Z, w: f32, h: f32, color: Color) -> Shape {
         Shape::Shape {
             z,
             state: ShapeState {
@@ -86,11 +140,11 @@ impl Shape {
                     h,
                     visibiliy: Visibility::Unknown,
                 },
-                state_const: ShapeConstState { color },
+                state_const: ShapeConstState { color, x, y },
             },
         }
     }
-    pub fn with_int(x: i16, y: i16, z: usize, w: i16, h: i16, color: Color) -> Shape {
+    pub fn with_int(x: i16, y: i16, z: Z, w: i16, h: i16, color: Color) -> Shape {
         Shape::Shape {
             z,
             state: ShapeState {
@@ -101,11 +155,15 @@ impl Shape {
                     h: h.into(),
                     visibiliy: Visibility::Unknown,
                 },
-                state_const: ShapeConstState { color },
+                state_const: ShapeConstState {
+                    color,
+                    x: x.into(),
+                    y: y.into(),
+                },
             },
         }
     }
-    pub fn z(&self) -> usize {
+    pub fn z(&self) -> Z {
         match self {
             Shape::Shape { z, .. } => *z,
             Shape::Group { z, .. } => *z,
@@ -207,15 +265,27 @@ pub enum Preset {
 pub enum Effect {
     Appear,
     Disappear,
-    SlideIn,
+    SlideIn {
+        direction: Direction,
+    },
     SlideOut {
+        direction: Direction,
         origin: Option<(f32, f32)>,
     },
     Path {
         path: Vec<(f32, f32)>,
         x: f32,
         y: f32,
+        relative: bool,
     },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Direction {
+    Up,
+    Down,
+    Right,
+    Left,
 }
 
 impl Effect {
@@ -224,30 +294,90 @@ impl Effect {
             Effect::Appear => Preset::Entr(1, 0),
             Effect::Disappear => Preset::Exit(1, 0),
             Effect::Path { .. } => Preset::Path(0, 1),
-            Effect::SlideIn => Preset::Entr(0, 0),
+            Effect::SlideIn { .. } => Preset::Entr(0, 0),
             Effect::SlideOut { .. } => Preset::Exit(0, 0),
         }
     }
 
-    pub fn place(x: f32, y: f32) -> Effect {
+    pub fn path(x: f32, y: f32, relative: bool) -> Effect {
         Effect::Path {
             path: Vec::new(),
             x,
             y,
+            relative,
         }
     }
 
-    pub fn apply(&self, state: &mut ShapeDynState) {
+    pub fn place() -> Effect {
+        Effect::Path {
+            path: Vec::new(),
+            x: 0.,
+            y: 0.,
+            relative: true,
+        }
+    }
+
+    pub fn slide_in(direction: Direction) -> Effect {
+        Effect::SlideIn { direction }
+    }
+
+    pub fn apply(
+        &self,
+        state_dyn: &mut ShapeDynState,
+        state_const: &ShapeConstState,
+    ) -> (bool, bool) {
+        console!("{self:?}");
+        let old_visibility = state_dyn.visibiliy;
         match self.preset() {
-            Preset::Entr(_, _) => state.visibiliy = Visibility::Visible,
+            Preset::Entr(_, _) => state_dyn.visibiliy = Visibility::Visible,
             Preset::Emph(_, _) => {}
             Preset::Path(_, _) => {}
-            Preset::Exit(_, _) => state.visibiliy = Visibility::Hidden,
+            Preset::Exit(_, _) => state_dyn.visibiliy = Visibility::Hidden,
         }
         match self {
             Effect::Path { x, y, .. } => {
-                state.x = *x;
-                state.y = *y;
+                state_dyn.x = state_const.x + *x;
+                state_dyn.y = state_const.y + *y;
+            }
+            Effect::Appear => {}
+            Effect::Disappear => {}
+            Effect::SlideIn { .. } => {
+                state_dyn.x = state_const.x;
+                state_dyn.y = state_const.y;
+            }
+            Effect::SlideOut { .. } => todo!("SlideOut"),
+        }
+        match (old_visibility, state_dyn.visibiliy) {
+            (Visibility::Unknown, Visibility::Hidden)
+            | (Visibility::Visible, Visibility::Hidden) => (true, false),
+            (_, Visibility::Visible) => (true, true),
+            _ => (false, false),
+        }
+    }
+
+    pub fn init(&mut self, states_dyn: &[ShapeDynState], states_const: &[ShapeConstState]) {
+        match self {
+            Effect::Path {
+                ref mut path,
+                ref mut x,
+                ref mut y,
+                relative,
+            } => {
+                *path = Vec::new();
+                if !*relative {
+                    let mut cx = f32::MAX;
+                    let mut cy = f32::MAX;
+                    for state in states_const {
+                        if state.x < cx {
+                            cx = state.x;
+                        }
+                        if state.y < cy {
+                            cy = state.y;
+                        }
+                    }
+                    *x -= cx;
+                    *y -= cy;
+                }
             }
             _ => {}
         }
@@ -268,6 +398,34 @@ pub struct Animation {
 pub struct Context {
     pub head: usize,
     pub animations: Vec<Animation>,
+}
+
+impl Context {
+    fn init(
+        &mut self,
+        refs: &[Referer],
+        shapes_dyn: &mut [ShapeDynState],
+        shapes_const: &mut [ShapeConstState],
+    ) {
+        for animation in &mut self.animations {
+            let old_index = animation.target.index();
+            let target = refs[old_index];
+            animation.target = target;
+            let (start, end) = target.bounds();
+            animation
+                .effect
+                .init(&shapes_dyn[start..end], &shapes_const[start..end]);
+            for state_dyn in &mut shapes_dyn[start..end] {
+                match (animation.effect.preset(), state_dyn.visibiliy) {
+                    (Preset::Entr(_, _), Visibility::Unknown) => {
+                        state_dyn.visibiliy = Visibility::Hidden
+                    }
+                    (_, Visibility::Unknown) => state_dyn.visibiliy = Visibility::Visible,
+                    _ => {}
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Default, Debug)]
@@ -301,20 +459,30 @@ impl Timeline {
 //=========================================================
 // Slide
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Slide {
     pub shapes: Vec<(usize, Shape)>,
     pub timeline: Timeline,
+    pub width: f32,
+    pub height: f32,
 }
 
 impl Slide {
+    pub fn new(width: f32, height: f32) -> Self {
+        Self {
+            shapes: Vec::new(),
+            timeline: Timeline::default(),
+            width,
+            height,
+        }
+    }
     pub fn add(&mut self, shape: Shape) -> Referer {
         let id = self.shapes.len();
         self.shapes.push((id, shape));
         Referer::Shape(id)
     }
-    pub fn tl_add(&mut self, target: Referer, click: bool, animation: Effect, on: Option<Referer>) {
-        self.timeline.add(target, click, animation, on)
+    pub fn tl_add(&mut self, target: Referer, click: bool, effect: Effect, on: Option<Referer>) {
+        self.timeline.add(target, click, effect, on)
     }
     pub fn presentation(mut self) -> Presentation {
         self.shapes.sort_by(|a, b| a.1.z().cmp(&b.1.z()));
@@ -324,7 +492,7 @@ impl Slide {
         let mut shapes_const = Vec::with_capacity(total_size);
         let mut shapes_groups = Vec::with_capacity(total_size);
         let mut referer_id = 0;
-        for (id, shape) in self.shapes {
+        for (id, shape) in self.shapes.into_iter().rev() {
             let group_size = shape.size();
             let (mut queue, referer) = match shape {
                 Shape::Shape {
@@ -374,54 +542,33 @@ impl Slide {
         }
 
         let mut main_context = self.timeline.main_context;
-        for animation in &mut main_context.animations {
-            let old_index = animation.target.index();
-            let target = refs[old_index];
-            animation.target = target;
-            let (start, end) = target.bounds();
-            for state_dyn in &mut shapes_dyn[start..end] {
-                match (animation.effect.preset(), state_dyn.visibiliy) {
-                    (Preset::Entr(_, _), Visibility::Unknown) => {
-                        state_dyn.visibiliy = Visibility::Hidden
-                    }
-                    (_, Visibility::Unknown) => state_dyn.visibiliy = Visibility::Visible,
-                    _ => {}
-                }
-            }
-        }
+        main_context.init(&refs, &mut shapes_dyn, &mut shapes_const);
         let mut contexts = vec![Context::default(); total_size];
         for (id, mut context) in self.timeline.contexts.into_iter().enumerate() {
-            for animation in &mut context.animations {
-                let old_index = animation.target.index();
-                let target = refs[old_index];
-                animation.target = target;
-                let (start, end) = target.bounds();
-                for state_dyn in &mut shapes_dyn[start..end] {
-                    match (animation.effect.preset(), state_dyn.visibiliy) {
-                        (Preset::Entr(_, _), Visibility::Unknown) => {
-                            state_dyn.visibiliy = Visibility::Hidden
-                        }
-                        (_, Visibility::Unknown) => state_dyn.visibiliy = Visibility::Visible,
-                        _ => {}
-                    }
-                }
-            }
+            context.init(&refs, &mut shapes_dyn, &mut shapes_const);
             contexts[refs[id].index()] = context;
         }
 
         Presentation {
-            states_dyn: shapes_dyn,
-            states_const: shapes_const,
-            referers: shapes_groups,
             timeline: Timeline {
                 main_context,
                 contexts,
             },
-            cache: CacheHit {
+            cache_hit: CacheHit {
                 x: 0.,
                 y: 0.,
                 index: 0,
             },
+            cache_data: CacheData {
+                update: false,
+                start: 0,
+                end: shapes_dyn.len(),
+            },
+            states_dyn: shapes_dyn,
+            states_const: shapes_const,
+            referers: shapes_groups,
+            width: self.width,
+            height: self.height,
         }
     }
 }
@@ -435,16 +582,26 @@ pub struct CacheHit {
     pub index: usize,
 }
 
+#[repr(C)]
+pub struct CacheData {
+    update: bool,
+    start: usize,
+    end: usize,
+}
+
 pub struct Presentation {
     pub states_dyn: Vec<ShapeDynState>,
     pub states_const: Vec<ShapeConstState>,
     pub referers: Vec<Referer>,
     pub timeline: Timeline,
-    pub cache: CacheHit,
+    pub cache_hit: CacheHit,
+    pub cache_data: CacheData,
+    pub width: f32,
+    pub height: f32,
 }
 
-impl std::fmt::Debug for Presentation {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Presentation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for state_dyn in &self.states_dyn {
             match state_dyn.visibiliy {
                 Visibility::Visible => f.write_str("|=====================")?,
@@ -475,38 +632,125 @@ impl std::fmt::Debug for Presentation {
 
 impl Presentation {
     pub fn under(&mut self, x: f32, y: f32) -> Option<Referer> {
-        let start_index = if self.cache.x == x && self.cache.y == y {
-            self.cache.index
-        } else {
-            0
-        };
-        for (index, state) in self.states_dyn.iter().enumerate().skip(start_index) {
+        for (index, state) in self.states_dyn.iter().enumerate().rev() {
             if state.is_visible() && state.contains(x, y) {
-                // self.cache = CacheHit { x, y, index };
                 return Some(self.referers[index]);
             }
         }
         return None;
     }
 
-    pub fn click(&mut self, x: f32, y: f32) {
-        let target = self.under(x, y);
-        let context = match target {
-            Some(referer) => &mut self.timeline.contexts[referer.index()],
-            None => &mut self.timeline.main_context,
+    pub fn under_cache(&mut self, x: f32, y: f32) -> Option<Referer> {
+        let start_index = if self.cache_hit.x == x && self.cache_hit.y == y {
+            self.cache_hit.index
+        } else {
+            0
         };
+        for (index, state) in self.states_dyn.iter().enumerate().take(start_index).rev() {
+            if state.is_visible() && state.contains(x, y) {
+                self.cache_hit = CacheHit { x, y, index };
+                return Some(self.referers[index]);
+            }
+        }
+        self.cache_hit = CacheHit { x, y, index: 0 };
+        None
+    }
+
+    pub fn click(&mut self, x: f32, y: f32) {
+        self.cache_data.update = true;
+        self.cache_data.start = 0;
+        self.cache_data.end = self.states_dyn.len() - 1;
+        let (target, context) = match self.under(x, y) {
+            Some(referer) => {
+                console!("{referer:?}");
+                let context = &mut self.timeline.contexts[referer.index()];
+                if context.animations.is_empty() {
+                    (None, &mut self.timeline.main_context)
+                } else {
+                    (Some(referer), context)
+                }
+            }
+            None => (None, &mut self.timeline.main_context),
+        };
+        console!("{target:?}");
         let mut first = true;
-        for (head, animation) in &mut context.animations.iter_mut().enumerate().skip(context.head) {
+        let head = if context.head == context.animations.len() {
+            if target.is_none() {
+                exit(1);
+            }
+            0
+        } else {
+            context.head
+        };
+        context.head = context.animations.len();
+        for (head, animation) in context.animations.iter_mut().enumerate().skip(head) {
             if !first && animation.click {
                 context.head = head;
-                return;
+                break;
             }
             first = false;
             let (start, end) = animation.target.bounds();
-            for state in &mut self.states_dyn[start..end] {
-                animation.effect.apply(state);
+            for i in start..end {
+                animation
+                    .effect
+                    .apply(&mut self.states_dyn[i], &self.states_const[i]);
             }
         }
-        context.head = 0;
+    }
+
+    pub fn click_cache(&mut self, x: f32, y: f32) {
+        let (target, context) = match self.under_cache(x, y) {
+            Some(referer) => {
+                let context = &mut self.timeline.contexts[referer.index()];
+                if context.animations.is_empty() {
+                    (None, &mut self.timeline.main_context)
+                } else {
+                    (Some(referer), context)
+                }
+            }
+            None => (None, &mut self.timeline.main_context),
+        };
+        let mut first = true;
+        let head = if context.head == context.animations.len() {
+            if target.is_none() {
+                exit(1);
+            }
+            0
+        } else {
+            context.head
+        };
+        let mut cache_index = self.cache_hit.index;
+        let (mut cache_min, mut cache_max) = if self.cache_data.update {
+            (self.cache_data.start, self.cache_data.end)
+        } else {
+            (self.states_dyn.len(), 0)
+        };
+        context.head = context.animations.len();
+        for (head, animation) in context.animations.iter_mut().enumerate().skip(head) {
+            if !first && animation.click {
+                context.head = head;
+                break;
+            }
+            first = false;
+            let (start, end) = animation.target.bounds();
+            for i in start..end {
+                let (perceptible, obstructible) = animation
+                    .effect
+                    .apply(&mut self.states_dyn[i], &self.states_const[i]);
+                if obstructible && i < cache_index {
+                    cache_index = i;
+                }
+                if perceptible && i < cache_min {
+                    cache_min = i;
+                }
+                if perceptible && i > cache_max {
+                    cache_max = i;
+                }
+            }
+        }
+        self.cache_hit.index = cache_index;
+        self.cache_data.start = cache_min;
+        self.cache_data.end = cache_max;
+        self.cache_data.update = true;
     }
 }

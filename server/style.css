@@ -1,0 +1,13 @@
+body {
+    margin: 0;
+    background: #000000;
+}
+h1 {
+    color: #FFFFFF;
+}
+#canvas {
+    width: 800px;
+    height: 600px;
+    background: #FFFFFF;
+    image-rendering: pixelated;
+}

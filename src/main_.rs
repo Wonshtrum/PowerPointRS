@@ -1,7 +1,13 @@
-use powerpointrs::{Slide, Shape, Color, Effect};
+use std::time::Instant;
+
+use powerpointrs::{Color, Effect, Shape, Slide};
 
 fn main() {
+    println!("hello!");
     let mut slide = Slide::default();
+    for _ in 0..100000 {
+        slide.add(Shape::with_int(0, 0, 0, 0, 0, Color::BLACK));
+    }
     let r0 = slide.add(Shape::with_int(1, 1, 1, 1, 1, Color::BLACK));
     let r1 = slide.add(Shape::with_int(2, 2, 2, 2, 2, Color::BLACK));
     let _r = slide.add(Shape::with_int(3, 3, 3, 3, 3, Color::BLACK));
@@ -26,12 +32,17 @@ fn main() {
     slide.tl_add(r2, true, Effect::Appear, Some(r1));
     slide.tl_add(r2, true, Effect::Disappear, Some(r2));
 
-    println!("{slide:#?}");
+    // println!("{slide:#?}");
     let mut presentation = slide.presentation();
-    println!("{:#?}", presentation.timeline);
-    println!("{presentation:#?}");
+    // println!("{:#?}", presentation.timeline);
     presentation.click(1., 1.);
-    println!("{presentation:#?}");
     presentation.click(1., 1.);
-    println!("{presentation:#?}");
+    // println!("{presentation:#?}");
+    // println!("{presentation:#?}");
+    let start = Instant::now();
+    for _ in 0..1000000 {
+        presentation.click_cache(2., 2.);
+    }
+    // println!("{presentation:#?}");
+    println!("{:?}", start.elapsed());
 }
