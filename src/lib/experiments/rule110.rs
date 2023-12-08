@@ -60,7 +60,7 @@ pub fn rule110() -> Box<Presentation> {
         s.add(Shape::with_float(TX, TY, z!(-3-(N_M as isize)), W, W, Color::new(255, 0, 255)))
     ).collect::<Vec<_>>();
     let call_out = (0..N_GROUP).into_iter().map(|_|
-        s.add(Shape::with_float(TX, TY, z!(-(N_M as isize)), W, W, Color::new(255, 100, 255)))
+        s.add(Shape::with_float(TX, TY, z!(-(N_M as isize)), W, W, Color::new(255, 200, 255)))
     ).collect::<Vec<_>>();
     s.tl_add(start, false, Effect::Disappear, Some(start));
     s.tl_add(zero, false, Effect::Disappear, Some(start));
@@ -73,6 +73,7 @@ pub fn rule110() -> Box<Presentation> {
     for index in 0..N_GROUP {
         let i = call_in[index];
         let o = call_out[index];
+        s.tl_add(o, false, Effect::Appear, Some(i));
         for target in &matrix[index] {
             s.tl_add(*target, false, Effect::path(TX, TY, false), Some(i));
             s.tl_add(*target, false, Effect::slide_in(Direction::Down), Some(o));
@@ -124,7 +125,7 @@ pub fn rule110() -> Box<Presentation> {
     let mut last = start;
     for y in 0..N_ROWS {
         for target in matrix.iter().flat_map(|v| v).map(|r| *r) {
-            s.tl_add(target, false, Effect::Appear, Some(target));
+            s.tl_add(target, false, Effect::Appear, Some(last));
         }
         for x in 0..N_COLUMNS {
             let cell = &cells[x][y];

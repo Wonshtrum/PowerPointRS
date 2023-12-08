@@ -1,29 +1,6 @@
-// #![no_std]
-
-// #[macro_use]
-// extern crate alloc;
-
-// pub use alloc::vec::Vec;
-// pub use core::{fmt, option::Option, result::Result};
 use std::{fmt, process::exit};
 
-mod entry;
-mod experiments;
-mod wasm;
-
-#[macro_export]
-macro_rules! console {
-    ($($t:tt)*) => {
-        crate::wasm::pptrs::log(&format_args!($($t)*).to_string());
-    };
-}
-
-macro_rules! todo {
-    ($($t:tt)*) => {{
-        console!($($t)*);
-        unreachable!();
-    }};
-}
+pub mod experiments;
 
 //=========================================================
 // Shape
@@ -69,17 +46,17 @@ impl Color {
     pub const RED: Self = Self::from_u32(0xFF0000);
     pub const GREEN: Self = Self::from_u32(0x00FF00);
     pub const BLUE: Self = Self::from_u32(0x0000FF);
-    const fn new(r: u8, g: u8, b: u8) -> Self {
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
     }
-    const fn from_u32(c: u32) -> Self {
+    pub const fn from_u32(c: u32) -> Self {
         Self {
             r: ((c & 0xFF0000) >> 16) as u8,
             g: ((c & 0x00FF00) >> 8) as u8,
             b: ((c & 0x0000FF) >> 0) as u8,
         }
     }
-    const fn grey(c: u8) -> Self {
+    pub const fn grey(c: u8) -> Self {
         Self { r: c, g: c, b: c }
     }
 }
@@ -113,13 +90,13 @@ pub struct Z(pub isize, pub isize, pub isize);
 #[macro_export]
 macro_rules! z {
     ($a:expr) => {
-        crate::Z($a as isize, 0, 0)
+        Z($a as isize, 0, 0)
     };
     ($a:expr, $b:expr) => {
-        crate::Z($a as isize, $b as isize, 0)
+        Z($a as isize, $b as isize, 0)
     };
     ($a:expr, $b:expr, $c:expr) => {
-        crate::Z($a as isize, $b as isize, $c as isize)
+        Z($a as isize, $b as isize, $c as isize)
     };
 }
 
@@ -253,13 +230,13 @@ pub enum Preset {
     Exit(u8, u8),
 }
 
-// #[derive(Clone, Copy, Debug)]
-// pub enum Direction {
-//     Up,
-//     Down,
-//     Left,
-//     Right,
-// }
+#[derive(Clone, Copy, Debug)]
+pub enum Direction {
+    Up,
+    Down,
+    Right,
+    Left,
+}
 
 #[derive(Clone, Debug)]
 pub enum Effect {
@@ -278,14 +255,6 @@ pub enum Effect {
         y: f32,
         relative: bool,
     },
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Direction {
-    Up,
-    Down,
-    Right,
-    Left,
 }
 
 impl Effect {
@@ -326,7 +295,6 @@ impl Effect {
         state_dyn: &mut ShapeDynState,
         state_const: &ShapeConstState,
     ) -> (bool, bool) {
-        console!("{self:?}");
         let old_visibility = state_dyn.visibiliy;
         match self.preset() {
             Preset::Entr(_, _) => state_dyn.visibiliy = Visibility::Visible,
@@ -336,8 +304,8 @@ impl Effect {
         }
         match self {
             Effect::Path { x, y, .. } => {
-                state_dyn.x = state_const.x + *x;
-                state_dyn.y = state_const.y + *y;
+                state_dyn.x = state_const.x + x;
+                state_dyn.y = state_const.y + y;
             }
             Effect::Appear => {}
             Effect::Disappear => {}
@@ -364,17 +332,21 @@ impl Effect {
                 relative,
             } => {
                 *path = Vec::new();
-                if !*relative {
-                    let mut cx = f32::MAX;
-                    let mut cy = f32::MAX;
-                    for state in states_const {
-                        if state.x < cx {
-                            cx = state.x;
-                        }
-                        if state.y < cy {
-                            cy = state.y;
-                        }
+                let mut cx = f32::MAX;
+                let mut cy = f32::MAX;
+                for state in states_const {
+                    if state.x < cx {
+                        cx = state.x;
                     }
+                    if state.y < cy {
+                        cy = state.y;
+                    }
+                }
+                // if *relative {
+                //     *x += cx;
+                //     *y += cy;
+                // }
+                if !*relative {
                     *x -= cx;
                     *y -= cy;
                 }
@@ -443,7 +415,6 @@ impl Timeline {
         };
         match on {
             Some(referer) => {
-                // let index = animation.referer().index();
                 let index = referer.index();
                 let length = self.contexts.len();
                 for _ in length..(index + 1) {
@@ -576,12 +547,14 @@ impl Slide {
 //=========================================================
 // Presentation
 
+#[derive(Clone, Debug)]
 pub struct CacheHit {
     pub x: f32,
     pub y: f32,
     pub index: usize,
 }
 
+#[derive(Clone, Debug)]
 #[repr(C)]
 pub struct CacheData {
     update: bool,
@@ -602,6 +575,10 @@ pub struct Presentation {
 
 impl fmt::Debug for Presentation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!(
+            "cache_hit: {:?}\ncache_data: {:?}\n",
+            self.cache_hit, self.cache_data,
+        ))?;
         for state_dyn in &self.states_dyn {
             match state_dyn.visibiliy {
                 Visibility::Visible => f.write_str("|=====================")?,
@@ -642,9 +619,9 @@ impl Presentation {
 
     pub fn under_cache(&mut self, x: f32, y: f32) -> Option<Referer> {
         let start_index = if self.cache_hit.x == x && self.cache_hit.y == y {
-            self.cache_hit.index
+            self.cache_hit.index + 1
         } else {
-            0
+            self.states_dyn.len()
         };
         for (index, state) in self.states_dyn.iter().enumerate().take(start_index).rev() {
             if state.is_visible() && state.contains(x, y) {
@@ -662,7 +639,6 @@ impl Presentation {
         self.cache_data.end = self.states_dyn.len() - 1;
         let (target, context) = match self.under(x, y) {
             Some(referer) => {
-                console!("{referer:?}");
                 let context = &mut self.timeline.contexts[referer.index()];
                 if context.animations.is_empty() {
                     (None, &mut self.timeline.main_context)
@@ -672,7 +648,6 @@ impl Presentation {
             }
             None => (None, &mut self.timeline.main_context),
         };
-        console!("{target:?}");
         let mut first = true;
         let head = if context.head == context.animations.len() {
             if target.is_none() {
@@ -737,7 +712,8 @@ impl Presentation {
                 let (perceptible, obstructible) = animation
                     .effect
                     .apply(&mut self.states_dyn[i], &self.states_const[i]);
-                if obstructible && i < cache_index {
+                // let (perceptible, obstructible) = (true, true);
+                if obstructible && i > cache_index {
                     cache_index = i;
                 }
                 if perceptible && i < cache_min {

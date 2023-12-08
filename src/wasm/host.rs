@@ -1,6 +1,4 @@
 pub mod pptrs {
-    // use crate::*;
-
     mod sys {
         #[link(wasm_import_module = "pptrs")]
         extern "C" {
@@ -18,11 +16,9 @@ pub mod pptrs {
     }
 }
 
-// #[no_mangle]
-// pub extern "C" fn init_panic_hook() {
-//     core::panic::set_hook(Box::new(|info| {
-//         let msg = info.to_string();
-//         pptrs::error(&msg);
-//     }));
-//     pptrs::log("Panic Hook successfully initialized");
-// }
+#[macro_export]
+macro_rules! console {
+    ($($t:tt)*) => {
+        $crate::host::pptrs::log(&format_args!($($t)*).to_string());
+    };
+}

@@ -1,9 +1,12 @@
-use crate::{console, experiments, Presentation};
+#![no_main]
+
+use powerpointrs::{experiments, Presentation};
+mod host;
 
 #[no_mangle]
 pub extern "C" fn main() -> Box<Presentation> {
-    experiments::rule110()
     // experiments::test()
+    experiments::rule110()
 }
 
 #[no_mangle]
@@ -13,11 +16,12 @@ pub extern "C" fn display(presentation: &Presentation) {
 
 #[no_mangle]
 pub extern "C" fn click(presentation: &mut Presentation, x: f32, y: f32, n: usize) {
-    presentation.click(x, y);
-    // console!("{x} {y}");
-    // for _ in 0..n {
-    //     presentation.under(x, y);
-    // }
+    // presentation.click(x, y);
+    // console!("{x} {y} {n}");
+    for _ in 0..n {
+        presentation.click_cache(x, y);
+    }
+    // console!("{:?}", presentation.cache_hit);
 }
 
 const DYNAMIC: usize = 0;

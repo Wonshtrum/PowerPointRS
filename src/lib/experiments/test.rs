@@ -1,4 +1,4 @@
-use crate::{console, z, Color, Effect, Presentation, Shape, Slide};
+use crate::{z, Color, Effect, Presentation, Shape, Slide, Z};
 
 pub fn test() -> Box<Presentation> {
     let mut slide = Slide::new(40., 30.);
@@ -19,7 +19,7 @@ pub fn test() -> Box<Presentation> {
             Shape::with_int(5, 5, z!(5), 5, 5, Color::new(200, 0, 250)),
         ],
     });
-    console!("{r0:?} {r1:?} {r2:?}");
+    println!("{r0:?} {r1:?} {r2:?}");
     slide.tl_add(r0, true, Effect::Appear, None);
     slide.tl_add(r1, true, Effect::Appear, Some(r0));
     slide.tl_add(r0, true, Effect::Disappear, Some(r0));
@@ -31,13 +31,6 @@ pub fn test() -> Box<Presentation> {
     slide.tl_add(r3, true, Effect::Disappear, Some(r3));
     slide.tl_add(r3, true, Effect::path(0., 0., false), Some(r3));
 
-    console!("{slide:#?}");
     let presentation = slide.presentation();
-    console!("{:#?}", presentation.timeline);
-    // console!("{presentation:#?}");
-    // presentation.click(1., 1.);
-    // console!("{presentation:#?}");
-    // presentation.click(1., 1.);
-    // console!("{presentation:#?}");
     Box::new(presentation)
 }

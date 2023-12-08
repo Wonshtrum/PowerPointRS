@@ -42,7 +42,7 @@ async function init() {
         maximum: 1000,
         shared: true,
     });
-    let wasm_path = "../target/wasm32-unknown-unknown/release/powerpointrs.wasm";
+    let wasm_path = "../target/wasm32-unknown-unknown/release/pptwasm.wasm";
     wasm = await WebAssembly.instantiateStreaming(fetch(wasm_path), {
         "js": {
             "memory": memory,
@@ -95,7 +95,9 @@ function get_vbo(index) {
 
 function click(x = 1, y = 1, n = 1) {
     console.log(x, y, n);
+    let start = Date.now();
     wasm.instance.exports.click(presentation, x, y, n);
+    console.log("click_time", Date.now() - start);
     // wasm.instance.exports.display(presentation);
     // console.log(vb_data_dyn);
     // console.log(vb_data_const);
@@ -246,3 +248,13 @@ canvas.addEventListener("click", e => {
     render();
     console.log("time", Date.now() - start);
 });
+
+function update() {
+    reset_backing_arraybuffer();
+    update_vbo();
+    render();
+}
+
+function display() {
+    wasm.instance.exports.display(presentation);
+}
