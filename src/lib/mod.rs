@@ -1,6 +1,7 @@
 use std::{fmt, process::exit};
 
 pub mod experiments;
+pub mod render;
 
 //=========================================================
 // Shape
@@ -10,6 +11,12 @@ pub enum Visibility {
     Hidden,
     Visible,
     Unknown,
+}
+
+impl Visibility {
+    pub fn is_visible(&self) -> bool {
+        matches!(self, Visibility::Unknown | Visibility::Visible)
+    }
 }
 
 #[derive(Clone)]
@@ -28,11 +35,11 @@ impl ShapeDynState {
     }
 
     pub fn is_visible(&self) -> bool {
-        matches!(self.visibiliy, Visibility::Unknown | Visibility::Visible)
+        self.visibiliy.is_visible()
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct Color {
     pub r: u8,
@@ -342,10 +349,6 @@ impl Effect {
                         cy = state.y;
                     }
                 }
-                // if *relative {
-                //     *x += cx;
-                //     *y += cy;
-                // }
                 if !*relative {
                     *x -= cx;
                     *y -= cy;

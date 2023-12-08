@@ -1,6 +1,6 @@
 #![no_main]
 
-use powerpointrs::{experiments, Presentation};
+use powerpointrs::{experiments, Color, Presentation};
 mod host;
 
 #[no_mangle]
@@ -13,15 +13,16 @@ pub extern "C" fn main() -> Box<Presentation> {
 pub extern "C" fn display(presentation: &Presentation) {
     console!("{presentation:#?}");
 }
+#[no_mangle]
+pub extern "C" fn print(presentation: &Presentation, scale: f32) {
+    console!("{}", presentation.render(scale, Color::WHITE).to_string());
+}
 
 #[no_mangle]
 pub extern "C" fn click(presentation: &mut Presentation, x: f32, y: f32, n: usize) {
-    // presentation.click(x, y);
-    // console!("{x} {y} {n}");
     for _ in 0..n {
         presentation.click_cache(x, y);
     }
-    // console!("{:?}", presentation.cache_hit);
 }
 
 const DYNAMIC: usize = 0;
