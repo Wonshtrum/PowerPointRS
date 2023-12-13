@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use crate::{Color, Presentation, ShapeConstState, ShapeDynState};
+use crate::Color;
 
 pub struct Canvas<Pixel> {
     pub width: usize,
@@ -74,31 +74,5 @@ impl Canvas<Color> {
             string.push_str("\x1b[0m\n");
         }
         string
-    }
-}
-
-impl Presentation {
-    pub fn render(&self, scale: f32, background: Color) -> Canvas<Color> {
-        let width = (self.width * scale) as usize;
-        let height = (self.height * scale) as usize;
-        let mut canvas = Canvas::new(width, height, background);
-        for i in 0..self.states_dyn.len() {
-            let ShapeDynState {
-                x,
-                y,
-                w,
-                h,
-                visibiliy,
-            } = self.states_dyn[i];
-            if visibiliy.is_visible() {
-                let ShapeConstState { color, .. } = self.states_const[i];
-                let x = (x * scale + 0.5) as isize;
-                let y = (y * scale + 0.5) as isize;
-                let w = (w * scale + 0.5) as isize;
-                let h = (h * scale + 0.5) as isize;
-                canvas.fill_rect(x, y, w, h, color);
-            }
-        }
-        canvas
     }
 }

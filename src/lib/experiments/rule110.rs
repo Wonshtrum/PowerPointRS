@@ -1,4 +1,4 @@
-use crate::{z, Color, Direction, Effect, Presentation, Referer, Shape, Slide, Z};
+use crate::{z, Color, Direction, Effect, Referer, Shape, Slide, Z};
 
 struct Cell {
     main: Referer,
@@ -24,18 +24,19 @@ impl Cell {
     }
 }
 
-const N_COLUMNS: usize = 20;
-const N_ROWS: usize = 20;
+const N_COLUMNS: usize = 60;
+const N_ROWS: usize = 60;
 const N_GROUP: usize = 3;
 const N_M: usize = 1 << N_GROUP;
 const W: f32 = 3.;
+const W_CELL: f32 = 1.;
 const D: f32 = 0.;
 const TX: f32 = 0.;
 const TY: f32 = 20.;
 const BLACK: Color = Color::BLACK;
 
 #[rustfmt::skip]
-pub fn rule110() -> Box<Presentation> {
+pub fn rule110() -> Slide {
     let mut s = Slide::new(120., 90.);
     let matrix = (0..N_GROUP)
         .into_iter()
@@ -45,7 +46,10 @@ pub fn rule110() -> Box<Presentation> {
                 .into_iter()
                 .map(|x| x as f32)
                 .map(|x| {
-                    let target = s.add(Shape::with_float(x * (W + 1.), y * (W + 1.), z!(-2-(N_M as isize)), W, W, Color::new(100*x as u8, 100*y as u8, 0)));
+                    let target = s.add(Shape::with_float(
+                        x * (W + 1.),y * (W + 1.), z!(-2-(N_M as isize)), W, W,
+                        Color::new(100*x as u8, 100*y as u8, 0)
+                    ));
                     s.tl_add(target, false, Effect::Disappear, Some(target));
                     target
                 })
@@ -83,7 +87,7 @@ pub fn rule110() -> Box<Presentation> {
     for i in 0..N_M {
         let s0 = s.add(Shape::with_float((N_GROUP+i+1) as f32*(W+1.), 0., z!(-1-(N_M as isize)), W, W, Color::grey(200)));
         let s1 = s.add(Shape::with_float((N_GROUP+i+1) as f32*(W+1.), 0., z!(-1-(N_M as isize)), W, W, Color::new(200, 0, 0)));
-        let s2 = s.add(Shape::with_float((N_GROUP+i+1) as f32 *(W+1.), W, z!(0), W, W, BLACK));
+        let s2 = s.add(Shape::with_float((N_GROUP+i+1) as f32*(W+1.), W, z!(0), W, W, BLACK));
         controlers.push(s0);
         controlers.push(s1);
         s.tl_add(s0, false, Effect::Disappear, Some(s2));
@@ -106,7 +110,7 @@ pub fn rule110() -> Box<Presentation> {
             s.tl_add(*c0, false, Effect::path(TX, TY, false), Some(*c1));
         }
     }
-    let ox = s.width - W;
+    let ox = s.width - W_CELL;
     let oy = 10.;
     let cells = (0..N_COLUMNS)
         .into_iter()
@@ -116,12 +120,12 @@ pub fn rule110() -> Box<Presentation> {
                 .into_iter()
                 .map(|y| (y, y as f32))
                 .map(|(y, yf)| {
-                    Cell::new(&mut s, ox-x*(W+D), oy+yf*(W+D), W, z!(1+N_ROWS-y), y==0, y==N_ROWS-1)
+                    Cell::new(&mut s, ox-x*(W_CELL+D), oy+yf*(W_CELL+D), W_CELL, z!(1+N_ROWS-y), y==0, y==N_ROWS-1)
                 })
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    
+
     let mut last = start;
     for y in 0..N_ROWS {
         for target in matrix.iter().flat_map(|v| v).map(|r| *r) {
@@ -154,17 +158,16 @@ pub fn rule110() -> Box<Presentation> {
             }
         }
         let x = N_COLUMNS-1;
-        let i = N_GROUP-1;
         if y < N_ROWS-1 {
-            let tmp = s.add(Shape::with_float(ox-(x as f32 +1.)*(W+D), oy+(y as f32)*(W+D), z!(1+N_ROWS-y), W, W, Color::new(255, 255, 0))); //_UPDATE
+            let tmp = s.add(Shape::with_float(ox-(x as f32 +1.)*(W_CELL+D), oy+(y as f32)*(W_CELL+D), z!(1+N_ROWS-y), W_CELL, W_CELL, Color::new(255, 255, 0))); //_UPDATE
             s.tl_add(tmp, false, Effect::path(TX, TY, false), Some(last));
-            s.tl_add(call_in[(x+i)%N_GROUP], false, Effect::Appear, Some(tmp));
+            s.tl_add(call_in[(x+1)%N_GROUP], false, Effect::Appear, Some(tmp));
             s.tl_add(cells[x][y+1].reset, false, Effect::path(TX, TY, false), Some(tmp));
             s.tl_add(cells[x][y+1].reset, false, Effect::Appear, Some(tmp));
             s.tl_add(tmp, true, Effect::place(), Some(tmp));
             last = tmp;
         }
     }
-    let presentation = s.presentation();
-    Box::new(presentation)
+
+    s
 }

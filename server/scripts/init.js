@@ -230,6 +230,16 @@ function click(x = 1, y = 1, n = 1) {
     console.log("click_time", Date.now() - start);
 }
 
+function clicks(x = 1, y = 1, n = 1) {
+    console.log(x, y, n);
+    let start = Date.now();
+    for (let i = 0; i < n; i++) {
+        wasm.instance.exports.click(presentation, x, y, 1);
+        update();
+    }
+    console.log("clicks_time", Date.now() - start);
+}
+
 function update() {
     reset_backing_arraybuffer();
     update_vbo();

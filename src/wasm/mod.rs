@@ -1,12 +1,13 @@
 #![no_main]
 
-use powerpointrs::{experiments, Color, Presentation};
+use powerpointrs::{experiments, runners::basic::Presentation, Color};
 mod host;
 
 #[no_mangle]
 pub extern "C" fn main() -> Box<Presentation> {
-    // experiments::test()
-    experiments::rule110()
+    // let slide = experiments::test();
+    let slide = experiments::rule110();
+    Box::new(Presentation::from(slide))
 }
 
 #[no_mangle]
@@ -21,7 +22,7 @@ pub extern "C" fn print(presentation: &Presentation, scale: f32) {
 #[no_mangle]
 pub extern "C" fn click(presentation: &mut Presentation, x: f32, y: f32, n: usize) {
     for _ in 0..n {
-        presentation.click_cache(x, y);
+        presentation.click(x, y);
     }
 }
 

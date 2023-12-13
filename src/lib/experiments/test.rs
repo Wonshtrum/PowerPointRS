@@ -1,6 +1,6 @@
-use crate::{z, Color, Effect, Presentation, Shape, Slide, Z};
+use crate::{z, Color, Effect, Shape, Slide, Z};
 
-pub fn test() -> Box<Presentation> {
+pub fn test() -> Slide {
     let mut slide = Slide::new(40., 30.);
     let r0 = slide.add(Shape::with_int(1, 1, z!(1), 1, 1, Color::new(255, 0, 0)));
     let r1 = slide.add(Shape::with_int(2, 2, z!(2), 2, 2, Color::new(0, 255, 0)));
@@ -31,6 +31,5 @@ pub fn test() -> Box<Presentation> {
     slide.tl_add(r3, true, Effect::Disappear, Some(r3));
     slide.tl_add(r3, true, Effect::path(0., 0., false), Some(r3));
 
-    let presentation = slide.presentation();
-    Box::new(presentation)
+    slide
 }

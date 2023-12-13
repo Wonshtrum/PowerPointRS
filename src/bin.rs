@@ -1,9 +1,10 @@
 use std::time::Instant;
 
-use powerpointrs::{experiments, Color};
+use powerpointrs::{experiments, runners::basic::Presentation, Color};
 
 fn main() {
-    let mut presentation = experiments::rule110();
+    let slide = experiments::rule110();
+    let mut presentation = Presentation::from(slide);
     let start = Instant::now();
 
     let clicks = [
@@ -16,15 +17,17 @@ fn main() {
         (38., 4.),
         (42., 4.),
         // set initial state
-        (118., 8.),
+        (120., 10.),
     ];
     for (x, y) in clicks {
         presentation.click(x, y);
     }
 
-    for _ in 0..3000 {
-        presentation.click(1., 21.);
+    // presentation.update_filter(0., 20.);
+    for _ in 0..26500 {
+        presentation.click(0., 20.);
     }
     println!("{:?}", start.elapsed());
     println!("{}", presentation.render(1., Color::WHITE).to_string());
+    println!("iterations: {}", presentation.iters);
 }
