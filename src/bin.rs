@@ -1,10 +1,17 @@
 use std::time::Instant;
 
-use powerpointrs::{experiments, runners::basic::Presentation, Color};
+use powerpointrs::{
+    experiments,
+    runners::{
+        basic::Presentation as BasicPresentation, minimal::Presentation as MinimalPresentation,
+    },
+    Color,
+};
 
 fn main() {
     let slide = experiments::rule110();
-    let mut presentation = Presentation::from(slide);
+    let mut presentation = MinimalPresentation::from(slide, (0., 20.));
+    // let mut presentation = BasicPresentation::from(slide);
     let start = Instant::now();
 
     let clicks = [

@@ -1,4 +1,4 @@
-use std::{fmt, process::exit};
+use std::{fmt, io::BufRead};
 
 pub mod experiments;
 pub mod filters;
@@ -6,40 +6,14 @@ pub mod render;
 pub mod runners;
 
 //=========================================================
+// Debug
+
+pub fn pause() {
+    let _ = std::io::stdin().lock().read_line(&mut String::new());
+}
+
+//=========================================================
 // Shape
-
-#[derive(Clone, Copy)]
-pub enum Visibility {
-    Hidden,
-    Visible,
-    Unknown,
-}
-
-impl Visibility {
-    pub fn is_visible(&self) -> bool {
-        matches!(self, Visibility::Unknown | Visibility::Visible)
-    }
-}
-
-#[derive(Clone)]
-#[repr(C)]
-pub struct ShapeDynState {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-    pub visibiliy: Visibility,
-}
-
-impl ShapeDynState {
-    pub fn contains(&self, x: f32, y: f32) -> bool {
-        x >= self.x && y >= self.y && x <= self.x + self.w && y <= self.y + self.h
-    }
-
-    pub fn is_visible(&self) -> bool {
-        self.visibiliy.is_visible()
-    }
-}
 
 #[derive(Clone, Copy)]
 #[repr(C)]
@@ -71,24 +45,19 @@ impl Color {
 }
 
 #[derive(Clone)]
-#[repr(C)]
-pub struct ShapeConstState {
-    pub color: Color,
+pub struct ShapeState {
     pub x: f32,
     pub y: f32,
-}
-
-#[derive(Clone)]
-pub struct ShapeState {
-    pub state_dyn: ShapeDynState,
-    pub state_const: ShapeConstState,
+    pub w: f32,
+    pub h: f32,
+    pub color: Color,
 }
 
 impl fmt::Debug for ShapeState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(
             "State({}, {}, {}, {})",
-            self.state_dyn.x, self.state_dyn.y, self.state_dyn.w, self.state_dyn.h,
+            self.x, self.y, self.w, self.h,
         ))
     }
 }
@@ -118,34 +87,18 @@ impl Shape {
     pub fn with_float(x: f32, y: f32, z: Z, w: f32, h: f32, color: Color) -> Shape {
         Shape::Shape {
             z,
-            state: ShapeState {
-                state_dyn: ShapeDynState {
-                    x,
-                    y,
-                    w,
-                    h,
-                    visibiliy: Visibility::Unknown,
-                },
-                state_const: ShapeConstState { color, x, y },
-            },
+            state: ShapeState { x, y, w, h, color },
         }
     }
     pub fn with_int(x: i16, y: i16, z: Z, w: i16, h: i16, color: Color) -> Shape {
         Shape::Shape {
             z,
             state: ShapeState {
-                state_dyn: ShapeDynState {
-                    x: x.into(),
-                    y: y.into(),
-                    w: w.into(),
-                    h: h.into(),
-                    visibiliy: Visibility::Unknown,
-                },
-                state_const: ShapeConstState {
-                    color,
-                    x: x.into(),
-                    y: y.into(),
-                },
+                x: x.into(),
+                y: y.into(),
+                w: w.into(),
+                h: h.into(),
+                color,
             },
         }
     }
@@ -298,67 +251,6 @@ impl Effect {
     pub fn slide_in(direction: Direction) -> Effect {
         Effect::SlideIn { direction }
     }
-
-    pub fn apply(
-        &self,
-        state_dyn: &mut ShapeDynState,
-        state_const: &ShapeConstState,
-    ) -> (bool, bool) {
-        let old_visibility = state_dyn.visibiliy;
-        match self.preset() {
-            Preset::Entr(_, _) => state_dyn.visibiliy = Visibility::Visible,
-            Preset::Emph(_, _) => {}
-            Preset::Path(_, _) => {}
-            Preset::Exit(_, _) => state_dyn.visibiliy = Visibility::Hidden,
-        }
-        match self {
-            Effect::Path { x, y, .. } => {
-                state_dyn.x = state_const.x + x;
-                state_dyn.y = state_const.y + y;
-            }
-            Effect::Appear => {}
-            Effect::Disappear => {}
-            Effect::SlideIn { .. } => {
-                state_dyn.x = state_const.x;
-                state_dyn.y = state_const.y;
-            }
-            Effect::SlideOut { .. } => todo!("SlideOut"),
-        }
-        match (old_visibility, state_dyn.visibiliy) {
-            (Visibility::Unknown, Visibility::Hidden)
-            | (Visibility::Visible, Visibility::Hidden) => (true, false),
-            (_, Visibility::Visible) => (true, true),
-            _ => (false, false),
-        }
-    }
-
-    pub fn init(&mut self, states_dyn: &[ShapeDynState], states_const: &[ShapeConstState]) {
-        match self {
-            Effect::Path {
-                ref mut path,
-                ref mut x,
-                ref mut y,
-                relative,
-            } => {
-                *path = Vec::new();
-                let mut cx = f32::MAX;
-                let mut cy = f32::MAX;
-                for state in states_const {
-                    if state.x < cx {
-                        cx = state.x;
-                    }
-                    if state.y < cy {
-                        cy = state.y;
-                    }
-                }
-                if !*relative {
-                    *x -= cx;
-                    *y -= cy;
-                }
-            }
-            _ => {}
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -375,34 +267,6 @@ pub struct Animation {
 pub struct Context {
     pub head: usize,
     pub animations: Vec<Animation>,
-}
-
-impl Context {
-    fn init(
-        &mut self,
-        refs: &[Referer],
-        shapes_dyn: &mut [ShapeDynState],
-        shapes_const: &mut [ShapeConstState],
-    ) {
-        for animation in &mut self.animations {
-            let old_index = animation.target.index();
-            let target = refs[old_index];
-            animation.target = target;
-            let (start, end) = target.bounds();
-            animation
-                .effect
-                .init(&shapes_dyn[start..end], &shapes_const[start..end]);
-            for state_dyn in &mut shapes_dyn[start..end] {
-                match (animation.effect.preset(), state_dyn.visibiliy) {
-                    (Preset::Entr(_, _), Visibility::Unknown) => {
-                        state_dyn.visibiliy = Visibility::Hidden
-                    }
-                    (_, Visibility::Unknown) => state_dyn.visibiliy = Visibility::Visible,
-                    _ => {}
-                }
-            }
-        }
-    }
 }
 
 #[derive(Clone, Default, Debug)]

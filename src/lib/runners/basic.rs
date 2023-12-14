@@ -1,9 +1,50 @@
 use std::{fmt, process::exit};
 
 use crate::{
-    filters::Filter, render::Canvas, Color, Context, Referer, Shape, ShapeConstState,
-    ShapeDynState, ShapeState, Slide, Timeline, Visibility,
+    filters::Filter, render::Canvas, Color, Context, Effect, Preset, Referer, Shape, ShapeState,
+    Slide, Timeline,
 };
+
+#[derive(Clone, Copy)]
+pub enum Visibility {
+    Hidden,
+    Visible,
+    Unknown,
+}
+
+impl Visibility {
+    pub fn is_visible(&self) -> bool {
+        matches!(self, Visibility::Unknown | Visibility::Visible)
+    }
+}
+
+#[derive(Clone)]
+#[repr(C)]
+pub struct ShapeConstState {
+    pub color: Color,
+    pub x: f32,
+    pub y: f32,
+}
+
+#[derive(Clone)]
+#[repr(C)]
+pub struct ShapeDynState {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub visibility: Visibility,
+}
+
+impl ShapeDynState {
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        x >= self.x && y >= self.y && x <= self.x + self.w && y <= self.y + self.h
+    }
+
+    pub fn is_visible(&self) -> bool {
+        self.visibility.is_visible()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct CacheHit {
@@ -15,9 +56,9 @@ pub struct CacheHit {
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct CacheData {
-    update: bool,
-    start: usize,
-    end: usize,
+    pub update: bool,
+    pub start: usize,
+    pub end: usize,
 }
 
 pub struct Presentation {
@@ -46,17 +87,19 @@ impl From<Slide> for Presentation {
             let group_size = shape.size();
             let (mut queue, referer) = match shape {
                 Shape::Shape {
-                    state:
-                        ShapeState {
-                            state_dyn,
-                            state_const,
-                        },
+                    state: ShapeState { x, y, w, h, color },
                     ..
                 } => {
                     let referer = Referer::Shape(referer_id);
                     refs[id] = referer;
-                    shapes_dyn.push(state_dyn);
-                    shapes_const.push(state_const);
+                    shapes_dyn.push(ShapeDynState {
+                        x,
+                        y,
+                        w,
+                        h,
+                        visibility: Visibility::Unknown,
+                    });
+                    shapes_const.push(ShapeConstState { color, x, y });
                     shapes_groups.push(referer);
                     referer_id += 1;
                     continue;
@@ -71,15 +114,17 @@ impl From<Slide> for Presentation {
             while let Some(shape) = queue.pop() {
                 match shape {
                     Shape::Shape {
-                        state:
-                            ShapeState {
-                                state_dyn,
-                                state_const,
-                            },
+                        state: ShapeState { x, y, w, h, color },
                         ..
                     } => {
-                        shapes_dyn.push(state_dyn);
-                        shapes_const.push(state_const);
+                        shapes_dyn.push(ShapeDynState {
+                            x,
+                            y,
+                            w,
+                            h,
+                            visibility: Visibility::Unknown,
+                        });
+                        shapes_const.push(ShapeConstState { color, x, y });
                         shapes_groups.push(referer);
                         referer_id += 1;
                     }
@@ -92,10 +137,10 @@ impl From<Slide> for Presentation {
         }
 
         let mut main_context = slide.timeline.main_context;
-        main_context.init(&refs, &mut shapes_dyn, &mut shapes_const);
+        init_context(&mut main_context, &refs, &mut shapes_dyn, &mut shapes_const);
         let mut contexts = vec![Context::default(); total_size];
         for (id, mut context) in slide.timeline.contexts.into_iter().enumerate() {
-            context.init(&refs, &mut shapes_dyn, &mut shapes_const);
+            init_context(&mut context, &refs, &mut shapes_dyn, &mut shapes_const);
             contexts[refs[id].index()] = context;
         }
 
@@ -132,7 +177,7 @@ impl fmt::Debug for Presentation {
             self.cache_hit, self.cache_data,
         ))?;
         for state_dyn in &self.states_dyn {
-            match state_dyn.visibiliy {
+            match state_dyn.visibility {
                 Visibility::Visible => f.write_str("|=====================")?,
                 Visibility::Hidden => f.write_str("|                     ")?,
                 Visibility::Unknown => f.write_str("|~~~~~~~~~~~~~~~~~~~~~")?,
@@ -229,9 +274,11 @@ impl Presentation {
             first = false;
             let (start, end) = animation.target.bounds();
             for i in start..end {
-                animation
-                    .effect
-                    .apply(&mut self.states_dyn[i], &self.states_const[i]);
+                apply_effect(
+                    &mut animation.effect,
+                    &mut self.states_dyn[i],
+                    &self.states_const[i],
+                );
             }
         }
     }
@@ -272,9 +319,11 @@ impl Presentation {
             first = false;
             let (start, end) = animation.target.bounds();
             for i in start..end {
-                let (perceptible, obstructible) = animation
-                    .effect
-                    .apply(&mut self.states_dyn[i], &self.states_const[i]);
+                let (perceptible, obstructible) = apply_effect(
+                    &mut animation.effect,
+                    &mut self.states_dyn[i],
+                    &self.states_const[i],
+                );
                 if obstructible
                     && i > cache_index
                     && self.states_dyn[i].contains(self.cache_hit.x, self.cache_hit.y)
@@ -330,9 +379,11 @@ impl Presentation {
             first = false;
             let (start, end) = animation.target.bounds();
             for i in start..end {
-                let (perceptible, obstructible) = animation
-                    .effect
-                    .apply(&mut self.states_dyn[i], &self.states_const[i]);
+                let (perceptible, obstructible) = apply_effect(
+                    &mut animation.effect,
+                    &mut self.states_dyn[i],
+                    &self.states_const[i],
+                );
                 let state = &self.states_dyn[i];
                 if obstructible && state.contains(self.cache_hit.x, self.cache_hit.y) {
                     self.filter.set(i);
@@ -374,7 +425,7 @@ impl Presentation {
                 y,
                 w,
                 h,
-                visibiliy,
+                visibility: visibiliy,
             } = self.states_dyn[i];
             if visibiliy.is_visible() {
                 let ShapeConstState { color, .. } = self.states_const[i];
@@ -386,5 +437,99 @@ impl Presentation {
             }
         }
         canvas
+    }
+}
+
+pub fn apply_effect(
+    effect: &mut Effect,
+    state_dyn: &mut ShapeDynState,
+    state_const: &ShapeConstState,
+) -> (bool, bool) {
+    let old_visibility = state_dyn.visibility;
+    match effect.preset() {
+        Preset::Entr(_, _) => state_dyn.visibility = Visibility::Visible,
+        Preset::Emph(_, _) => {}
+        Preset::Path(_, _) => {}
+        Preset::Exit(_, _) => state_dyn.visibility = Visibility::Hidden,
+    }
+    match effect {
+        Effect::Path { x, y, .. } => {
+            state_dyn.x = state_const.x + *x;
+            state_dyn.y = state_const.y + *y;
+        }
+        Effect::Appear => {}
+        Effect::Disappear => {}
+        Effect::SlideIn { .. } => {
+            state_dyn.x = state_const.x;
+            state_dyn.y = state_const.y;
+        }
+        Effect::SlideOut { .. } => todo!("SlideOut"),
+    }
+    match (old_visibility, state_dyn.visibility) {
+        (Visibility::Unknown, Visibility::Hidden) | (Visibility::Visible, Visibility::Hidden) => {
+            (true, false)
+        }
+        (_, Visibility::Visible) => (true, true),
+        _ => (false, false),
+    }
+}
+
+pub fn init_effect(
+    effect: &mut Effect,
+    states_dyn: &[ShapeDynState],
+    states_const: &[ShapeConstState],
+) {
+    match effect {
+        Effect::Path {
+            ref mut path,
+            ref mut x,
+            ref mut y,
+            relative,
+        } => {
+            *path = Vec::new();
+            let mut cx = f32::MAX;
+            let mut cy = f32::MAX;
+            for state in states_const {
+                if state.x < cx {
+                    cx = state.x;
+                }
+                if state.y < cy {
+                    cy = state.y;
+                }
+            }
+            if !*relative {
+                *x -= cx;
+                *y -= cy;
+            }
+        }
+        _ => {}
+    }
+}
+
+pub fn init_context(
+    context: &mut Context,
+    refs: &[Referer],
+    shapes_dyn: &mut [ShapeDynState],
+    shapes_const: &mut [ShapeConstState],
+) {
+    for animation in &mut context.animations {
+        let old_index = animation.target.index();
+        let target = refs[old_index];
+        animation.target = target;
+        let (start, end) = target.bounds();
+        init_effect(
+            &mut animation.effect,
+            &shapes_dyn[start..end],
+            &shapes_const[start..end],
+        );
+        for state_dyn in &mut shapes_dyn[start..end] {
+            match (animation.effect.preset(), state_dyn.visibility) {
+                (Preset::Entr(_, _), Visibility::Unknown) => {
+                    state_dyn.visibility = Visibility::Hidden
+                }
+                (_, Visibility::Unknown) => state_dyn.visibility = Visibility::Visible,
+                _ => {}
+            }
+        }
     }
 }
