@@ -1,4 +1,4 @@
-use std::{fmt, process::exit};
+use std::{cmp::Reverse, fmt, process::exit};
 
 use crate::{
     filters::Filter, render::Canvas, Color, Context, Effect, Preset, Referer, Shape, ShapeState,
@@ -106,7 +106,7 @@ impl From<Slide> for Presentation {
                 }
                 Shape::Group { mut shapes, .. } => {
                     let referer = Referer::Group(referer_id, group_size);
-                    shapes.sort_by(|a, b| b.z().cmp(&a.z()));
+                    shapes.sort_by_key(|a| Reverse(a.z()));
                     refs[id] = referer;
                     (shapes, referer)
                 }
@@ -129,7 +129,7 @@ impl From<Slide> for Presentation {
                         referer_id += 1;
                     }
                     Shape::Group { mut shapes, .. } => {
-                        shapes.sort_by(|a, b| b.z().cmp(&a.z()));
+                        shapes.sort_by_key(|a| Reverse(a.z()));
                         queue = [queue, shapes].concat();
                     }
                 }
@@ -213,7 +213,7 @@ impl Presentation {
             }
         }
         self.iters += self.states_dyn.len();
-        return None;
+        None
     }
 
     pub fn under_cache(&mut self, x: f32, y: f32) -> Option<Referer> {
@@ -463,7 +463,13 @@ pub fn apply_effect(
             state_dyn.x = state_const.x;
             state_dyn.y = state_const.y;
         }
-        Effect::SlideOut { .. } => todo!("SlideOut"),
+        Effect::SlideOut { complete, .. } => {
+            if !*complete {
+                unimplemented!("incomplete SlideOut");
+            }
+            state_dyn.x = -state_const.x;
+            state_dyn.y = -state_const.y;
+        }
     }
     match (old_visibility, state_dyn.visibility) {
         (Visibility::Unknown, Visibility::Hidden) | (Visibility::Visible, Visibility::Hidden) => {
@@ -476,14 +482,14 @@ pub fn apply_effect(
 
 pub fn init_effect(
     effect: &mut Effect,
-    states_dyn: &[ShapeDynState],
+    _states_dyn: &[ShapeDynState],
     states_const: &[ShapeConstState],
 ) {
     match effect {
         Effect::Path {
-            ref mut path,
-            ref mut x,
-            ref mut y,
+            path,
+            x,
+            y,
             relative,
         } => {
             *path = Vec::new();

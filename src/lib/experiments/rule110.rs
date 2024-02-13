@@ -1,4 +1,4 @@
-use crate::{z, Color, Direction, Effect, Referer, Shape, Slide, Z};
+use crate::{anim, shape, z, Referer, Slide, Z};
 
 struct Cell {
     main: Referer,
@@ -9,13 +9,13 @@ struct Cell {
 #[rustfmt::skip]
 impl Cell {
     fn new(s: &mut Slide, x: f32, y: f32, w: f32, z: Z, first: bool, last: bool) -> Self {
-        let main = s.add(Shape::with_float(x, y, z, w, w, BLACK));
-        let reset = s.add(Shape::with_float(x, y - if first { w } else { 0. }, z, w, w, Color::new(0, 255, 255)));
-        s.tl_add(main, false, Effect::Appear, Some(reset));
-        s.tl_add(main, false, Effect::place(), Some(main));
+        let main = shape!(@s,x, y, w, w, Z=z);
+        let reset = shape!(@s,x, y - if first { w } else { 0. }, w, w, Z=z, c=(0, 255, 255));
+        anim!(@s, main => Appear, on=reset);
+        anim!(@s, main => Place, on=main);
         let next = if !last {
-            let next = s.add(Shape::with_float(x, y, z, w, w, Color::new(255, 0, 0)));
-            s.tl_add(next, false, Effect::Disappear, Some(next));
+            let next = shape!(@s,x, y, w, w, Z=z, c=(255, 0, 0));
+            anim!(@s, next => Disappear, on=next);
             Some(next)
         } else {
             None
@@ -33,91 +33,79 @@ const W_CELL: f32 = 1.;
 const D: f32 = 0.;
 const TX: f32 = 0.;
 const TY: f32 = 20.;
-const BLACK: Color = Color::BLACK;
 
 #[rustfmt::skip]
 pub fn rule110() -> Slide {
     let mut s = Slide::new(120., 90.);
     let matrix = (0..N_GROUP)
-        .into_iter()
         .map(|y| y as f32)
         .map(|y| {
             (0..N_GROUP)
-                .into_iter()
                 .map(|x| x as f32)
                 .map(|x| {
-                    let target = s.add(Shape::with_float(
-                        x * (W + 1.),y * (W + 1.), z!(-2-(N_M as isize)), W, W,
-                        Color::new(100*x as u8, 100*y as u8, 0)
-                    ));
-                    s.tl_add(target, false, Effect::Disappear, Some(target));
+                    let target = shape!(@s,x * (W + 1.),y * (W + 1.), W, W, z=(-2-(N_M as isize)), c=(100*x as u8, 100*y as u8, 0));
+                    anim!(@s, target => Disappear, on=target);
                     target
                 })
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
 
-    let stop = s.add(Shape::with_float(TX, TY, z!(2+N_ROWS), W, W, Color::new(0, 0, 255)));
-    let zero = s.add(Shape::with_float(TX, TY, z!(-1-(N_M as isize)), W, W, Color::grey(120)));
-    let start = s.add(Shape::with_float(TX, TY, z!(-4-(N_M as isize)), W, W, Color::new(0, 255, 0))); //_UPDATE
-    let call_in  = (0..N_GROUP).into_iter().map(|_|
-        s.add(Shape::with_float(TX, TY, z!(-3-(N_M as isize)), W, W, Color::new(255, 0, 255)))
-    ).collect::<Vec<_>>();
-    let call_out = (0..N_GROUP).into_iter().map(|_|
-        s.add(Shape::with_float(TX, TY, z!(-(N_M as isize)), W, W, Color::new(255, 200, 255)))
-    ).collect::<Vec<_>>();
-    s.tl_add(start, false, Effect::Disappear, Some(start));
-    s.tl_add(zero, false, Effect::Disappear, Some(start));
-    s.tl_add(zero, false, Effect::Disappear, Some(zero));
-    s.tl_add(stop, false, Effect::place(), Some(stop));
+    let stop = shape!(@s,TX, TY, W, W, z=(2+N_ROWS), c=(0, 0, 255), n="STOP");
+    let zero = shape!(@s,TX, TY, W, W, z=(-1-(N_M as isize)), c=(120, 120, 120), n="ZERO");
+    let start = shape!(@s,TX, TY, W, W, z=(-4-(N_M as isize)), c=(0, 255, 0), n="START");
+    let call_in  = (0..N_GROUP).map(|_| shape!(@s,TX, TY, W, W, z=(-3-(N_M as isize)), c=(255, 0, 255))).collect::<Vec<_>>();
+    let call_out = (0..N_GROUP).map(|_| shape!(@s,TX, TY, W, W, z=(-(N_M as isize)), c=(255, 200, 255))).collect::<Vec<_>>();
+    anim!(@s, start => Disappear, on=start);
+    anim!(@s, zero => Disappear, on=start);
+    anim!(@s, zero => Disappear, on=zero);
+    anim!(@s, stop => Place, on=stop);
     for target in call_in.iter().chain(call_out.iter()) {
-        s.tl_add(*target, false, Effect::Disappear, None);
-        s.tl_add(*target, false, Effect::Disappear, Some(*target));
+        anim!(@s, *target => Disappear);
+        anim!(@s, *target => Disappear, on=*target);
     }
     for index in 0..N_GROUP {
         let i = call_in[index];
         let o = call_out[index];
-        s.tl_add(o, false, Effect::Appear, Some(i));
+        anim!(@s, o => Appear, on=i);
         for target in &matrix[index] {
-            s.tl_add(*target, false, Effect::path(TX, TY, false), Some(i));
-            s.tl_add(*target, false, Effect::slide_in(Direction::Down), Some(o));
+            anim!(@s, *target => Target(TX, TY), on=i);
+            anim!(@s, *target => SlideIn, on=o);
         }
     }
     let mut controlers = vec![];
     for i in 0..N_M {
-        let s0 = s.add(Shape::with_float((N_GROUP+i+1) as f32*(W+1.), 0., z!(-1-(N_M as isize)), W, W, Color::grey(200)));
-        let s1 = s.add(Shape::with_float((N_GROUP+i+1) as f32*(W+1.), 0., z!(-1-(N_M as isize)), W, W, Color::new(200, 0, 0)));
-        let s2 = s.add(Shape::with_float((N_GROUP+i+1) as f32*(W+1.), W, z!(0), W, W, BLACK));
+        let s0 = shape!(@s,(N_GROUP+i+1) as f32*(W+1.), 0., W, W, z=(-1-(N_M as isize)), c=(200, 200, 200));
+        let s1 = shape!(@s,(N_GROUP+i+1) as f32*(W+1.), 0., W, W, z=(-1-(N_M as isize)), c=(200, 0, 0));
+        let s2 = shape!(@s,(N_GROUP+i+1) as f32*(W+1.), W, W, W);
         controlers.push(s0);
         controlers.push(s1);
-        s.tl_add(s0, false, Effect::Disappear, Some(s2));
-        s.tl_add(s0, true, Effect::Appear, Some(s2));
-        s.tl_add(zero, false, Effect::Appear, Some(s0));
+        anim!(@s, s0 => Disappear, on=s2);
+        anim!(@s, s0 => Appear, c=true, on=s2);
+        anim!(@s, zero => Appear, on=s0);
         for j in 0..N_GROUP {
             for k in 0..N_GROUP {
                 if i & 1 << (N_GROUP-k-1) == 0 {
-                    s.tl_add(s0, false, Effect::path(TX, TY, true), Some(matrix[j][k]));
-                    s.tl_add(s1, false, Effect::path(TX, TY, true), Some(matrix[j][k]));
+                    anim!(@s, s0 => Path(TX, TY), on=matrix[j][k]);
+                    anim!(@s, s1 => Path(TX, TY), on=matrix[j][k]);
                 }
             }
         }
     }
-    for c0 in &controlers {
-        for c1 in controlers.iter().chain(&[start]) {
-            s.tl_add(*c0, false, Effect::place(), Some(*c1));
+    for c0 in controlers.iter().copied() {
+        for c1 in controlers.iter().copied().chain([start]) {
+            anim!(@s, c0 => Place, on=c1);
         }
-        for c1 in &call_in {
-            s.tl_add(*c0, false, Effect::path(TX, TY, false), Some(*c1));
+        for c1 in call_in.iter().copied() {
+            anim!(@s, c0 => Target(TX, TY), on=c1);
         }
     }
     let ox = s.width - W_CELL;
     let oy = 10.;
     let cells = (0..N_COLUMNS)
-        .into_iter()
         .map(|x| x as f32)
         .map(|x| {
             (0..N_ROWS)
-                .into_iter()
                 .map(|y| (y, y as f32))
                 .map(|(y, yf)| {
                     Cell::new(&mut s, ox-x*(W_CELL+D), oy+yf*(W_CELL+D), W_CELL, z!(1+N_ROWS-y), y==0, y==N_ROWS-1)
@@ -128,43 +116,43 @@ pub fn rule110() -> Slide {
 
     let mut last = start;
     for y in 0..N_ROWS {
-        for target in matrix.iter().flat_map(|v| v).map(|r| *r) {
-            s.tl_add(target, false, Effect::Appear, Some(last));
+        for target in matrix.iter().flatten().copied() {
+            anim!(@s, target => Appear, on=last);
         }
         for x in 0..N_COLUMNS {
             let cell = &cells[x][y];
-            s.tl_add(cell.main, false, Effect::Disappear, None);
+            anim!(@s, cell.main => Disappear);
             if x > 0 {
-                s.tl_add(matrix[x%N_GROUP][0], false, Effect::Disappear, Some(cell.main));
+                anim!(@s, matrix[x%N_GROUP][0] => Disappear, on=cell.main);
             }
-            s.tl_add(matrix[(x+1)%N_GROUP][1], false, Effect::Disappear, Some(cell.main));
-            s.tl_add(matrix[(x+2)%N_GROUP][2], false, Effect::Disappear, Some(cell.main));
+            anim!(@s, matrix[(x+1)%N_GROUP][1] => Disappear, on=cell.main);
+            anim!(@s, matrix[(x+2)%N_GROUP][2] => Disappear, on=cell.main);
             if y == 0 {
-                s.tl_add(cell.main, true, Effect::Disappear, Some(cell.reset));
+                anim!(@s, cell.main => Disappear, c=true, on=cell.reset);
             } else {
-                s.tl_add(cell.reset, false, Effect::Disappear, Some(cell.reset));
-                s.tl_add(cell.reset, false, Effect::Disappear, Some(zero));
+                anim!(@s, cell.reset => Disappear, on=cell.reset);
+                anim!(@s, cell.reset => Disappear, on=zero);
             }
             if let Some(cell_next) = cell.next {
                 if x > 0 {
-                    s.tl_add(cells[x-1][y+1].reset, false, Effect::Appear, Some(cell_next));
-                    s.tl_add(cells[x-1][y+1].reset, false, Effect::path(TX, TY, false), Some(cell_next));
-                    s.tl_add(call_in[x%N_GROUP], false, Effect::Appear, Some(cell_next));
+                    anim!(@s, cells[x-1][y+1].reset => Appear, on=cell_next);
+                    anim!(@s, cells[x-1][y+1].reset => Target(TX, TY), on=cell_next);
+                    anim!(@s, call_in[x%N_GROUP] => Appear, on=cell_next);
                 }
                 for target in [cell.main, cell_next] {
-                    s.tl_add(target, false, Effect::path(TX, TY, false), Some(last));
+                    anim!(@s, target => Target(TX, TY), on=last);
                 }
                 last = cell_next;
             }
         }
         let x = N_COLUMNS-1;
         if y < N_ROWS-1 {
-            let tmp = s.add(Shape::with_float(ox-(x as f32 +1.)*(W_CELL+D), oy+(y as f32)*(W_CELL+D), z!(1+N_ROWS-y), W_CELL, W_CELL, Color::new(255, 255, 0))); //_UPDATE
-            s.tl_add(tmp, false, Effect::path(TX, TY, false), Some(last));
-            s.tl_add(call_in[(x+1)%N_GROUP], false, Effect::Appear, Some(tmp));
-            s.tl_add(cells[x][y+1].reset, false, Effect::path(TX, TY, false), Some(tmp));
-            s.tl_add(cells[x][y+1].reset, false, Effect::Appear, Some(tmp));
-            s.tl_add(tmp, true, Effect::place(), Some(tmp));
+            let tmp = shape!(@s,ox-(x as f32 +1.)*(W_CELL+D), oy+(y as f32)*(W_CELL+D), W_CELL, W_CELL, z=(1+N_ROWS-y), c=(255, 255, 0), n="UPDATE");
+            anim!(@s, tmp => Target(TX, TY), on=last);
+            anim!(@s, call_in[(x+1)%N_GROUP] => Appear, on=tmp);
+            anim!(@s, cells[x][y+1].reset => Target(TX, TY), on=tmp);
+            anim!(@s, cells[x][y+1].reset => Appear, on=tmp);
+            anim!(@s, tmp => Place, c=true, on=tmp);
             last = tmp;
         }
     }

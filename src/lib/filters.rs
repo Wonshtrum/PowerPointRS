@@ -1,5 +1,5 @@
 pub type Cell = usize;
-pub const CELL_SIZE: usize = std::mem::size_of::<Cell>() * 8 as usize;
+pub const CELL_SIZE: usize = std::mem::size_of::<Cell>() * 8;
 pub const CELL_SHIFT: usize = CELL_SIZE.trailing_zeros() as usize;
 pub const CELL_MASK: usize = CELL_SIZE - 1;
 

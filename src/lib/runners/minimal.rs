@@ -78,22 +78,18 @@ impl Presentation {
         let mut refs = vec![0; slide.shapes.len()];
         let mut shapes_dyn = DoubleFilter::new(total_size);
         let mut shapes_const = Vec::with_capacity(total_size);
-        let mut referer_id = 0;
-        let mut index = 0;
-        for (id, shape) in slide.shapes.into_iter().rev() {
+        for (referer_id, (id, shape)) in slide.shapes.into_iter().rev().enumerate() {
             match shape {
                 Shape::Shape {
                     state: ShapeState { x, y, w, h, color },
                     ..
                 } => {
                     refs[id] = referer_id;
-                    shapes_dyn.set(index, true, target == (x, y));
+                    shapes_dyn.set(referer_id, true, target == (x, y));
                     shapes_const.push(ShapeConstState { color, x, y, w, h });
-                    referer_id += 1;
                 }
                 Shape::Group { .. } => unimplemented!("groups"),
             };
-            index += 1;
         }
 
         let len_full = slide
@@ -182,7 +178,7 @@ impl Presentation {
             }
         }
         self.iters += self.states_const.len();
-        return None;
+        None
     }
 
     pub fn click(&mut self, x: f32, y: f32) {
@@ -274,7 +270,10 @@ pub fn init_context(
                     effect.targeting.unset(sub_index);
                 }
             }
-            Effect::SlideOut { .. } => {
+            Effect::SlideOut { complete, .. } => {
+                if !*complete {
+                    unimplemented!("incomplete slideout");
+                }
                 effect.visibility.unset(sub_index);
                 effect.targeting.unset(sub_index);
             }

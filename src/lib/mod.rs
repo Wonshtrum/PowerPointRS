@@ -44,6 +44,12 @@ impl Color {
     }
 }
 
+impl From<(u8, u8, u8)> for Color {
+    fn from(rgb: (u8, u8, u8)) -> Self {
+        Self::new(rgb.0, rgb.1, rgb.2)
+    }
+}
+
 #[derive(Clone)]
 pub struct ShapeState {
     pub x: f32,
@@ -65,41 +71,24 @@ impl fmt::Debug for ShapeState {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Z(pub isize, pub isize, pub isize);
 
-#[macro_export]
-macro_rules! z {
-    ($a:expr) => {
-        Z($a as isize, 0, 0)
-    };
-    ($a:expr, $b:expr) => {
-        Z($a as isize, $b as isize, 0)
-    };
-    ($a:expr, $b:expr, $c:expr) => {
-        Z($a as isize, $b as isize, $c as isize)
-    };
-}
-
 #[derive(Clone, Debug)]
 pub enum Shape {
-    Shape { z: Z, state: ShapeState },
-    Group { z: Z, shapes: Vec<Shape> },
+    Shape {
+        z: Z,
+        name: &'static str,
+        state: ShapeState,
+    },
+    Group {
+        z: Z,
+        shapes: Vec<Shape>,
+    },
 }
 impl Shape {
-    pub fn with_float(x: f32, y: f32, z: Z, w: f32, h: f32, color: Color) -> Shape {
+    pub fn new(x: f32, y: f32, w: f32, h: f32, z: Z, color: Color, name: &'static str) -> Shape {
         Shape::Shape {
             z,
+            name,
             state: ShapeState { x, y, w, h, color },
-        }
-    }
-    pub fn with_int(x: i16, y: i16, z: Z, w: i16, h: i16, color: Color) -> Shape {
-        Shape::Shape {
-            z,
-            state: ShapeState {
-                x: x.into(),
-                y: y.into(),
-                w: w.into(),
-                h: h.into(),
-                color,
-            },
         }
     }
     pub fn z(&self) -> Z {
@@ -114,6 +103,46 @@ impl Shape {
             Shape::Group { shapes, .. } => shapes.iter().map(Shape::size).sum(),
         }
     }
+}
+
+#[macro_export]
+macro_rules! z {
+    ($a:expr) => {
+        Z($a as isize, 0, 0)
+    };
+    ($a:expr, $b:expr) => {
+        Z($a as isize, $b as isize, 0)
+    };
+    ($a:expr, $b:expr, $c:expr) => {
+        Z($a as isize, $b as isize, $c as isize)
+    };
+}
+
+#[macro_export]
+macro_rules! shape {
+    (@$s:expr, $($t:tt)*) => {
+        $s.add(shape!{ $($t)* })
+    };
+    ($x:expr, $y:expr, $w:expr, $h:expr $(,Z=$Z:expr)? $(,z=($($z:expr),*))? $(,c=$c:expr)? $(,n=$n:expr)? $(,)?) => {{
+           let _z = Z(0,0,0);
+        $( let _z = $Z; )?
+        $( let _z = $crate::z!($($z),*); )?
+           let _c = $crate::Color::BLACK;
+        $( let _c = $c.into(); )?
+           let _n = "";
+        $( let _n = $n; )?
+        $crate::Shape::Shape {
+            z: _z,
+            name: _n,
+            state: $crate::ShapeState {
+                x: $x as f32,
+                y: $y as f32,
+                w: $w as f32,
+                h: $h as f32,
+                color: _c,
+            },
+        }
+    }};
 }
 
 // pub enum ShapeIterator {
@@ -156,6 +185,12 @@ pub enum Referer {
     Group(usize, usize),
 }
 
+impl std::default::Default for Referer {
+    fn default() -> Self {
+        Self::Shape(0)
+    }
+}
+
 impl Referer {
     pub fn index(&self) -> usize {
         match self {
@@ -165,7 +200,7 @@ impl Referer {
     }
     pub fn size(&self) -> usize {
         match self {
-            Referer::Shape(_) => 0,
+            Referer::Shape(_) => 1,
             Referer::Group(_, size) => *size,
         }
     }
@@ -210,6 +245,7 @@ pub enum Effect {
     SlideOut {
         direction: Direction,
         origin: Option<(f32, f32)>,
+        complete: bool,
     },
     Path {
         path: Vec<(f32, f32)>,
@@ -229,27 +265,56 @@ impl Effect {
             Effect::SlideOut { .. } => Preset::Exit(0, 0),
         }
     }
+}
 
-    pub fn path(x: f32, y: f32, relative: bool) -> Effect {
-        Effect::Path {
-            path: Vec::new(),
-            x,
-            y,
-            relative,
+pub enum MacroEffect {
+    Appear,
+    Disappear,
+    SlideIn,
+    SlideOut,
+    Mark,
+    Place,
+    Target(f32, f32),
+    Path(f32, f32),
+}
+
+impl From<MacroEffect> for Effect {
+    fn from(effect: MacroEffect) -> Self {
+        match effect {
+            MacroEffect::Appear => Self::Appear,
+            MacroEffect::Disappear => Self::Disappear,
+            MacroEffect::SlideIn => Self::SlideIn {
+                direction: Direction::Up,
+            },
+            MacroEffect::SlideOut => Self::SlideOut {
+                direction: Direction::Up,
+                origin: None,
+                complete: true,
+            },
+            MacroEffect::Mark => Self::SlideOut {
+                direction: Direction::Up,
+                origin: None,
+                complete: false,
+            },
+            MacroEffect::Place => Self::Path {
+                path: Vec::new(),
+                x: 0.,
+                y: 0.,
+                relative: true,
+            },
+            MacroEffect::Target(x, y) => Self::Path {
+                path: Vec::new(),
+                x,
+                y,
+                relative: false,
+            },
+            MacroEffect::Path(x, y) => Self::Path {
+                path: Vec::new(),
+                x,
+                y,
+                relative: true,
+            },
         }
-    }
-
-    pub fn place() -> Effect {
-        Effect::Path {
-            path: Vec::new(),
-            x: 0.,
-            y: 0.,
-            relative: true,
-        }
-    }
-
-    pub fn slide_in(direction: Direction) -> Effect {
-        Effect::SlideIn { direction }
     }
 }
 
@@ -258,6 +323,21 @@ pub struct Animation {
     pub target: Referer,
     pub click: bool,
     pub effect: Effect,
+}
+
+#[macro_export]
+macro_rules! anim {
+    (@$s:expr, $t:expr => $e:tt$(($($args:tt)+))? $(, c=$c:expr)? $(, on=$on:expr)?) => {
+        anim!(@$s, $t => $crate::MacroEffect::$e$(($($args)+))? $(, c=$c)? $(, on=$on)?)
+    };
+
+    (@$s:expr, $t:expr => $e:expr $(, c=$c:expr)? $(, on=$on:expr)?) => {{
+           let _c = false;
+        $( let _c = $c; )?
+           let _on = Option::<$crate::Referer>::None;
+        $( let _on = Some($on); )?
+        $s.tl_add($t, $e.into(), _c, _on)
+    }};
 }
 
 //=========================================================
@@ -276,7 +356,7 @@ pub struct Timeline {
 }
 
 impl Timeline {
-    pub fn add(&mut self, target: Referer, click: bool, effect: Effect, on: Option<Referer>) {
+    pub fn add(&mut self, target: Referer, effect: Effect, click: bool, on: Option<Referer>) {
         let animation = Animation {
             target,
             click,
@@ -321,7 +401,7 @@ impl Slide {
         self.shapes.push((id, shape));
         Referer::Shape(id)
     }
-    pub fn tl_add(&mut self, target: Referer, click: bool, effect: Effect, on: Option<Referer>) {
-        self.timeline.add(target, click, effect, on)
+    pub fn tl_add(&mut self, target: Referer, effect: Effect, click: bool, on: Option<Referer>) {
+        self.timeline.add(target, effect, click, on)
     }
 }
