@@ -3,15 +3,19 @@ use std::time::Instant;
 use powerpointrs::{
     experiments,
     runners::{
-        basic::Presentation as BasicPresentation, minimal::Presentation as MinimalPresentation,
+        basic::Presentation as BasicPresentation, compiled::Presentation as CompiledPresentation,
+        minimal::Presentation as MinimalPresentation,
     },
     Color,
 };
 
 fn main() {
+    // experiments::brainfck();
     let slide = experiments::rule110();
-    let mut presentation = MinimalPresentation::from(slide, (0., 20.));
+    // let slide = experiments::compilable1();
     // let mut presentation = BasicPresentation::from(slide);
+    // let mut presentation = MinimalPresentation::from(slide, (0., 20.));
+    let mut presentation = CompiledPresentation::from(slide, (0., 20.));
     let start = Instant::now();
 
     let clicks = [

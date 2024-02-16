@@ -24,12 +24,12 @@ impl Cell {
     }
 }
 
-const N_COLUMNS: usize = 60;
-const N_ROWS: usize = 60;
+const N_COLUMNS: usize = 10;
+const N_ROWS: usize = 10;
 const N_GROUP: usize = 3;
 const N_M: usize = 1 << N_GROUP;
 const W: f32 = 3.;
-const W_CELL: f32 = 1.;
+const W_CELL: f32 = 2.;
 const D: f32 = 0.;
 const TX: f32 = 0.;
 const TY: f32 = 20.;
@@ -59,7 +59,7 @@ pub fn rule110() -> Slide {
     anim!(@s, start => Disappear, on=start);
     anim!(@s, zero => Disappear, on=start);
     anim!(@s, zero => Disappear, on=zero);
-    anim!(@s, stop => Place, on=stop);
+    // anim!(@s, stop => Place, on=stop);
     for target in call_in.iter().chain(call_out.iter()) {
         anim!(@s, *target => Disappear);
         anim!(@s, *target => Disappear, on=*target);
