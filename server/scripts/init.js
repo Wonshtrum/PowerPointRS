@@ -36,9 +36,32 @@ let canvas = document.getElementById("canvas");
 let gl = canvas.getContext("webgl2", { premultipliedAlpha: false });
 let vbo_dyn;
 
+async function multi_fetch(urls) {
+    if (urls.length === 0) {
+        return new Error("All fetch sources failed");
+    }
+    let [url, ...others] = urls;
+    return await fetch(url)
+        .then(r => {
+            if (r.ok) {
+                console.log(url, "succeeded");
+                return r.arrayBuffer();
+            } else {
+                console.log(url, "failed");
+                return multi_fetch(others);
+            }
+	})
+        .catch(e => {
+            console.log(url, "failed");
+            return multi_fetch(others);
+        });
+}
+
 async function init() {
-    let wasm_path = "../target/wasm32-unknown-unknown/release/pptwasm.wasm";
-    wasm = await WebAssembly.instantiateStreaming(fetch(wasm_path), {
+    wasm = await WebAssembly.instantiate(await multi_fetch([
+        "../target/wasm32-unknown-unknown/release/pptwasm.wasm",
+        "https://raw.githubusercontent.com/Wonshtrum/Binaries/master/powerpointrs/pptwasm.wasm",
+    ]), {
         "pptrs": {
             "log": (ptr, size) => {
                 let msg = new TextDecoder().decode(get_memory_u8(ptr, size));
