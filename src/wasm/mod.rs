@@ -6,6 +6,7 @@ mod host;
 #[no_mangle]
 pub extern "C" fn main() -> Box<Presentation> {
     // let slide = experiments::test();
+    // let slide = experiments::sort();
     let slide = experiments::rule110();
     Box::new(Presentation::from(slide))
 }

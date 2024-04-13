@@ -50,7 +50,7 @@ async function multi_fetch(urls) {
                 console.log(url, "failed");
                 return multi_fetch(others);
             }
-	})
+        })
         .catch(e => {
             console.log(url, "failed");
             return multi_fetch(others);
@@ -89,6 +89,7 @@ async function init() {
     WIDTH = wasm.instance.exports.get_width(presentation);
     HEIGHT = wasm.instance.exports.get_height(presentation);
     init_gl();
+    tick();
 }
 
 function get_vbo(index) {
@@ -226,7 +227,7 @@ function update_vbo() {
     let update = subdata_slice[0];
     let start = subdata_slice[1] * 5;
     let end = subdata_slice[2] * 5;
-    console.log(update, start, end);
+    // console.log(update, start, end);
     if (update && start <= end) {
         subdata_slice[0] = 1;
         gl.bindBuffer(gl.ARRAY_BUFFER, vbo_dyn);
@@ -247,20 +248,20 @@ function print(scale) {
 }
 
 function click(x = 1, y = 1, n = 1) {
-    console.log(x, y, n);
+    // console.log(x, y, n);
     let start = Date.now();
     wasm.instance.exports.click(presentation, x, y, n);
-    console.log("click_time", Date.now() - start);
+    // console.log("click_time", Date.now() - start);
 }
 
 function clicks(x = 1, y = 1, n = 1) {
-    console.log(x, y, n);
+    // console.log(x, y, n);
     let start = Date.now();
     for (let i = 0; i < n; i++) {
         wasm.instance.exports.click(presentation, x, y, 1);
         update();
     }
-    console.log("clicks_time", Date.now() - start);
+    // console.log("clicks_time", Date.now() - start);
 }
 
 function update() {
@@ -269,11 +270,41 @@ function update() {
     render();
 }
 
-canvas.addEventListener("click", e => {
-    let x = e.x - canvas.offsetLeft;
-    let y = e.y - canvas.offsetTop;
-    click(x * WIDTH / canvas.offsetWidth, y * HEIGHT / canvas.offsetHeight);
-    update();
+let mouse = {
+    x: null,
+    y: null,
+    buttons: null,
+}
+canvas.addEventListener("mousedown", e => {
+    mouse.x = e.x;
+    mouse.y = e.y;
+    mouse.buttons = e.buttons;
 });
+canvas.addEventListener("mouseup", e => {
+    mouse.x = e.x;
+    mouse.y = e.y;
+    mouse.buttons = e.buttons;
+});
+canvas.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    e.stopPropagation();
+});
+
+let clicked = false;
+let many_clicks = 100;
+function tick() {
+    if ((mouse.buttons & 1 && !clicked) || mouse.buttons & 2) {
+        clicked = true;
+        clicks(
+            (mouse.x - canvas.offsetLeft) * WIDTH / canvas.offsetWidth,
+            (mouse.y - canvas.offsetTop) * HEIGHT / canvas.offsetHeight,
+            mouse.buttons & 2 ? many_clicks : 1,
+        );
+        update();
+    } else if ((mouse.buttons & 1) == 0) {
+        clicked = false
+    }
+    requestAnimationFrame(tick);
+}
 
 init();
