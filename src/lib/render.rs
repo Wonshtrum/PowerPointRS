@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{self, Write};
 
 use crate::Color;
 
@@ -46,9 +46,8 @@ impl<Pixel: Copy> Canvas<Pixel> {
     }
 }
 
-impl Canvas<Color> {
-    pub fn to_string(&self) -> String {
-        let mut string = String::new(); //String::with_capacity((self.width + 1) * (self.height / 2));
+impl fmt::Display for Canvas<Color> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for y in 0..(self.height / 2) {
             let line_top = y * 2 * self.width;
             let line_bot = (y * 2 + 1) * self.width;
@@ -64,15 +63,13 @@ impl Canvas<Color> {
                         g: g_fg,
                         b: b_fg,
                     } = self.pixels.get_unchecked(line_bot + x);
-                    string
-                        .write_fmt(format_args!(
-                            "\x1b[48;2;{r_bg};{g_bg};{b_bg};38;2;{r_fg};{g_fg};{b_fg}m▄"
-                        ))
-                        .unwrap();
+                    f.write_fmt(format_args!(
+                        "\x1b[48;2;{r_bg};{g_bg};{b_bg};38;2;{r_fg};{g_fg};{b_fg}m▄"
+                    ))?;
                 }
             }
-            string.push_str("\x1b[0m\n");
+            f.write_str("\x1b[0m\n")?;
         }
-        string
+        Ok(())
     }
 }

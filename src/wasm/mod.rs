@@ -17,7 +17,7 @@ pub extern "C" fn display(presentation: &Presentation) {
 }
 #[no_mangle]
 pub extern "C" fn print(presentation: &Presentation, scale: f32) {
-    console!("{}", presentation.render(scale, Color::WHITE).to_string());
+    console!("{}", presentation.render(scale, Color::WHITE));
 }
 
 #[no_mangle]
