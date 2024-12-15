@@ -149,7 +149,7 @@ impl fmt::Debug for Presentation {
         }
         for i in 0..self.states_const.len() {
             let (visible, targeted) = self.states_dyn.get(i);
-            f.write_fmt(format_args!("| {visible:05} {targeted:05}         ",))?;
+            f.write_fmt(format_args!("| {visible:05} {targeted:05}         "))?;
         }
         f.write_str("|\n")?;
         Ok(())
@@ -233,7 +233,7 @@ impl Presentation {
 pub fn init_context(
     context: &mut Context,
     refs: &[usize],
-    shapes_dyn: &mut DoubleFilter,
+    _shapes_dyn: &mut DoubleFilter,
     shapes_const: &mut [ShapeConstState],
     target_xy: (f32, f32),
 ) -> BasicContext {

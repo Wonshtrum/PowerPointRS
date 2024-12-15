@@ -1,3 +1,5 @@
+#[allow(dead_code)]
+
 pub mod pptrs {
     mod sys {
         #[link(wasm_import_module = "pptrs")]

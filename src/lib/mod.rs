@@ -1,5 +1,6 @@
 use std::{fmt, io::BufRead};
 
+pub mod bitvec;
 pub mod experiments;
 pub mod filters;
 pub mod render;
@@ -108,13 +109,13 @@ impl Shape {
 #[macro_export]
 macro_rules! z {
     ($a:expr) => {
-        Z($a as isize, 0, 0)
+        $crate::Z($a as isize, 0, 0)
     };
     ($a:expr, $b:expr) => {
-        Z($a as isize, $b as isize, 0)
+        $crate::Z($a as isize, $b as isize, 0)
     };
     ($a:expr, $b:expr, $c:expr) => {
-        Z($a as isize, $b as isize, $c as isize)
+        $crate::Z($a as isize, $b as isize, $c as isize)
     };
 }
 
@@ -124,7 +125,7 @@ macro_rules! shape {
         $s.add(shape!{ $($t)* })
     };
     ($x:expr, $y:expr, $w:expr, $h:expr $(,Z=$Z:expr)? $(,z=($($z:expr),*))? $(,c=$c:expr)? $(,n=$n:expr)? $(,)?) => {{
-           let _z = Z(0,0,0);
+           let _z = $crate::Z(0,0,0);
         $( let _z = $Z; )?
         $( let _z = $crate::z!($($z),*); )?
            let _c = $crate::Color::BLACK;
@@ -219,7 +220,7 @@ impl Referer {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Preset {
     Entr(u8, u8),
     Emph(u8, u8),

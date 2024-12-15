@@ -1,4 +1,4 @@
-use crate::{anim, shape, Referer, Slide, Z};
+use crate::{anim, shape, Referer, Slide};
 
 fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
     let h = h % 360.0;

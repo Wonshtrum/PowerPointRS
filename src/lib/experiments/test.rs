@@ -1,4 +1,4 @@
-use crate::{anim, shape, z, Shape, Slide, Z};
+use crate::{anim, shape, z, Shape, Slide};
 
 pub fn test() -> Slide {
     let mut slide = Slide::new(40., 30.);
