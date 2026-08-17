@@ -58,10 +58,12 @@ async function multi_fetch(urls) {
 }
 
 async function init() {
-    wasm = await WebAssembly.instantiate(await multi_fetch([
-        "../target/wasm32-unknown-unknown/release/pptwasm.wasm",
-        "https://raw.githubusercontent.com/Wonshtrum/Binaries/master/powerpointrs/pptwasm.wasm",
-    ]), {
+    const wasmBuf = await fs_fetch(
+        "Wonshtrum", "Binaries", "master",
+        ["../target/wasm32-unknown-unknown/release/pptwasm.wasm"],
+        { rootPath: "powerpointrs", extensions: ["wasm"] },
+    );
+    wasm = await WebAssembly.instantiate(wasmBuf, {
         "pptrs": {
             "log": (ptr, size) => {
                 let msg = new TextDecoder().decode(get_memory_u8(ptr, size));
