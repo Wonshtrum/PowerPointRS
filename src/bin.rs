@@ -35,6 +35,6 @@ fn main() {
         presentation.click(0., 20.);
     }
     println!("{:?}", start.elapsed());
-    println!("{}", presentation.render(1., Color::WHITE).to_string());
+    println!("{}", presentation.render(1., Color::WHITE));
     println!("iterations: {}", presentation.iters);
 }

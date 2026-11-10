@@ -1,4 +1,4 @@
-use crate::{anim, shape, z, Shape, Slide, Z};
+use crate::{anim, console, shape, z, Shape, Slide};
 
 pub fn test() -> Slide {
     let mut slide = Slide::new(40., 30.);
@@ -19,7 +19,7 @@ pub fn test() -> Slide {
             shape! {5, 5, 5, 5, z=(5), c=(200, 0, 250)},
         ],
     });
-    println!("{r0:?} {r1:?} {r2:?}");
+    console!("{r0:?} {r1:?} {r2:?}");
     anim!(@slide, r0 => Appear);
     anim!(@slide, r1 => Appear, on=r0);
     anim!(@slide, r0 => Disappear, on=r0);

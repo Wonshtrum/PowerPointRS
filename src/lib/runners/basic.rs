@@ -1,4 +1,4 @@
-use std::{cmp::Reverse, fmt, process::exit};
+use std::{cmp::Reverse, fmt};
 
 use crate::{
     filters::Filter, render::Canvas, Color, Context, Effect, Preset, Referer, Shape, ShapeState,
@@ -76,7 +76,7 @@ pub struct Presentation {
 
 impl From<Slide> for Presentation {
     fn from(mut slide: Slide) -> Self {
-        slide.shapes.sort_by(|a, b| a.1.z().cmp(&b.1.z()));
+        slide.shapes.sort_by_key(|s| s.1.z());
         let total_size = slide.shapes.iter().map(|e| e.1.size()).sum();
         let mut refs = vec![Referer::Shape(0); slide.shapes.len()];
         let mut shapes_dyn = Vec::with_capacity(total_size);
@@ -241,7 +241,7 @@ impl Presentation {
         self.filter.last().map(|index| self.referers[index])
     }
 
-    pub fn click(&mut self, x: f32, y: f32) {
+    pub fn click(&mut self, x: f32, y: f32) -> Result<(), ()> {
         self.cache_data.update = true;
         self.cache_data.start = 0;
         self.cache_data.end = self.states_dyn.len() - 1;
@@ -259,7 +259,7 @@ impl Presentation {
         let mut first = true;
         let head = if context.head == context.animations.len() {
             if target.is_none() {
-                exit(1);
+                return Err(());
             }
             0
         } else {
@@ -281,9 +281,10 @@ impl Presentation {
                 );
             }
         }
+        Ok(())
     }
 
-    pub fn click_cache(&mut self, x: f32, y: f32) {
+    pub fn click_cache(&mut self, x: f32, y: f32) -> Result<(), ()> {
         let (target, context) = match self.under_cache(x, y) {
             Some(referer) => {
                 let context = &mut self.timeline.contexts[referer.index()];
@@ -298,7 +299,7 @@ impl Presentation {
         let mut first = true;
         let head = if context.head == context.animations.len() {
             if target.is_none() {
-                exit(1);
+                return Err(());
             }
             0
         } else {
@@ -342,9 +343,10 @@ impl Presentation {
         self.cache_data.start = cache_min;
         self.cache_data.end = cache_max;
         self.cache_data.update = true;
+        Ok(())
     }
 
-    pub fn click_filter(&mut self, x: f32, y: f32) {
+    pub fn click_filter(&mut self, x: f32, y: f32) -> Result<(), ()> {
         let (target, context) = match self.under_filter(x, y) {
             Some(referer) => {
                 let context = &mut self.timeline.contexts[referer.index()];
@@ -359,7 +361,7 @@ impl Presentation {
         let mut first = true;
         let head = if context.head == context.animations.len() {
             if target.is_none() {
-                exit(1);
+                return Err(());
             }
             0
         } else {
@@ -401,6 +403,7 @@ impl Presentation {
         self.cache_data.start = cache_min;
         self.cache_data.end = cache_max;
         self.cache_data.update = true;
+        Ok(())
     }
 
     pub fn update_filter(&mut self, x: f32, y: f32) {

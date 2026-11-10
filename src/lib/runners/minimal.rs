@@ -73,7 +73,7 @@ pub struct Presentation {
 
 impl Presentation {
     pub fn from(mut slide: Slide, target: (f32, f32)) -> Self {
-        slide.shapes.sort_by(|a, b| a.1.z().cmp(&b.1.z()));
+        slide.shapes.sort_by_key(|s| s.1.z());
         let total_size = slide.shapes.iter().map(|e| e.1.size()).sum();
         let mut refs = vec![0; slide.shapes.len()];
         let mut shapes_dyn = DoubleFilter::new(total_size);

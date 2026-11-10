@@ -1,10 +1,10 @@
 #![no_main]
 
-use powerpointrs::{experiments, runners::basic::Presentation, Color};
-mod host;
+use powerpointrs::{console, experiments, runners::basic::Presentation, Color};
 
 #[no_mangle]
 pub extern "C" fn main() -> Box<Presentation> {
+    powerpointrs::host::setup_panic();
     // let slide = experiments::test();
     // let slide = experiments::sort();
     let slide = experiments::rule110();
@@ -23,7 +23,10 @@ pub extern "C" fn print(presentation: &Presentation, scale: f32) {
 #[no_mangle]
 pub extern "C" fn click(presentation: &mut Presentation, x: f32, y: f32, n: usize) {
     for _ in 0..n {
-        presentation.click(x, y);
+        if presentation.click(x, y).is_err() {
+            console!("nothing under!");
+            return;
+        }
     }
 }
 

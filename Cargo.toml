@@ -13,7 +13,7 @@ path = "src/bin.rs"
 
 [[bin]]
 name = "pptwasm"
-path = "src/wasm/mod.rs"
+path = "src/wasm.rs"
 
 [profile.release]
 strip = "symbols"

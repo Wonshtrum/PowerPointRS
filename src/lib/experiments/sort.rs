@@ -1,9 +1,9 @@
-use crate::{anim, shape, Referer, Slide, Z};
+use crate::{anim, shape, Referer, Slide};
 
 fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
     let h = h % 360.0;
-    let s = s.max(0.0).min(100.0) / 100.0;
-    let l = l.max(0.0).min(100.0) / 100.0;
+    let s = s.clamp(0.0, 100.0) / 100.0;
+    let l = l.clamp(0.0, 100.0) / 100.0;
 
     let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
     let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
