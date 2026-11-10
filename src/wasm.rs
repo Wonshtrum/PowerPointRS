@@ -7,7 +7,8 @@ pub extern "C" fn main() -> Box<Presentation> {
     powerpointrs::host::setup_panic();
     // let slide = experiments::test();
     // let slide = experiments::sort();
-    let slide = experiments::rule110();
+    // let slide = experiments::rule110(60, 60);
+    let slide = experiments::life(20, 36);
     Box::new(Presentation::from(slide))
 }
 

@@ -9,7 +9,8 @@ use powerpointrs::{
 };
 
 fn main() {
-    let slide = experiments::rule110();
+    let slide = experiments::rule110(60, 60);
+    let width = slide.width;
     let mut presentation = MinimalPresentation::from(slide, (0., 20.));
     // let mut presentation = BasicPresentation::from(slide);
     let start = Instant::now();
@@ -24,7 +25,7 @@ fn main() {
         (38., 4.),
         (42., 4.),
         // set initial state
-        (120., 10.),
+        (width, 10.),
     ];
     for (x, y) in clicks {
         presentation.click(x, y);

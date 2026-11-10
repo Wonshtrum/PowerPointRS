@@ -24,8 +24,6 @@ impl Cell {
     }
 }
 
-const N_COLUMNS: usize = 60;
-const N_ROWS: usize = 60;
 const N_GROUP: usize = 3;
 const N_M: usize = 1 << N_GROUP;
 const W: f32 = 3.;
@@ -35,8 +33,8 @@ const TX: f32 = 0.;
 const TY: f32 = 20.;
 
 #[rustfmt::skip]
-pub fn rule110() -> Slide {
-    let mut s = Slide::new(120., 90.);
+pub fn rule110(rows: usize, cols: usize) -> Slide {
+    let mut s = Slide::new(cols as f32 * W_CELL + 60., rows as f32 * W_CELL + 20.);
     let matrix = (0..N_GROUP)
         .map(|y| y as f32)
         .map(|y| {
@@ -51,7 +49,7 @@ pub fn rule110() -> Slide {
         })
         .collect::<Vec<_>>();
 
-    let stop = shape!(@s,TX, TY, W, W, z=(2+N_ROWS), c=(0, 0, 255), n="STOP");
+    let stop = shape!(@s,TX, TY, W, W, z=(2+rows), c=(0, 0, 255), n="STOP");
     let zero = shape!(@s,TX, TY, W, W, z=(-1-(N_M as isize)), c=(120, 120, 120), n="ZERO");
     let start = shape!(@s,TX, TY, W, W, z=(-4-(N_M as isize)), c=(0, 255, 0), n="START");
     let call_in  = (0..N_GROUP).map(|_| shape!(@s,TX, TY, W, W, z=(-3-(N_M as isize)), c=(255, 0, 255))).collect::<Vec<_>>();
@@ -102,24 +100,24 @@ pub fn rule110() -> Slide {
     }
     let ox = s.width - W_CELL;
     let oy = 10.;
-    let cells = (0..N_COLUMNS)
+    let cells = (0..cols)
         .map(|x| x as f32)
         .map(|x| {
-            (0..N_ROWS)
+            (0..rows)
                 .map(|y| (y, y as f32))
                 .map(|(y, yf)| {
-                    Cell::new(&mut s, ox-x*(W_CELL+D), oy+yf*(W_CELL+D), W_CELL, z!(1+N_ROWS-y), y==0, y==N_ROWS-1)
+                    Cell::new(&mut s, ox-x*(W_CELL+D), oy+yf*(W_CELL+D), W_CELL, z!(1+rows-y), y==0, y==rows-1)
                 })
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
 
     let mut last = start;
-    for y in 0..N_ROWS {
+    for y in 0..rows {
         for target in matrix.iter().flatten().copied() {
             anim!(@s, target => Appear, on=last);
         }
-        for x in 0..N_COLUMNS {
+        for x in 0..cols {
             let cell = &cells[x][y];
             anim!(@s, cell.main => Disappear);
             if x > 0 {
@@ -145,9 +143,9 @@ pub fn rule110() -> Slide {
                 last = cell_next;
             }
         }
-        let x = N_COLUMNS-1;
-        if y < N_ROWS-1 {
-            let tmp = shape!(@s,ox-(x as f32 +1.)*(W_CELL+D), oy+(y as f32)*(W_CELL+D), W_CELL, W_CELL, z=(1+N_ROWS-y), c=(255, 255, 0), n="UPDATE");
+        let x = cols-1;
+        if y < rows-1 {
+            let tmp = shape!(@s,ox-(x as f32 +1.)*(W_CELL+D), oy+(y as f32)*(W_CELL+D), W_CELL, W_CELL, z=(1+rows-y), c=(255, 255, 0), n="UPDATE");
             anim!(@s, tmp => Target(TX, TY), on=last);
             anim!(@s, call_in[(x+1)%N_GROUP] => Appear, on=tmp);
             anim!(@s, cells[x][y+1].reset => Target(TX, TY), on=tmp);
