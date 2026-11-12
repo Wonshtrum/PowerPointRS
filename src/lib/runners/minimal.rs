@@ -1,19 +1,19 @@
-use std::{collections::HashMap, fmt, process::exit};
+use std::{collections::HashMap, fmt};
 
 use crate::{
-    filters::{Cell, DoubleFilter, CELL_MASK, CELL_SHIFT},
+    filters::{Cell, DoubleFilter, Filter, CELL_MASK, CELL_SHIFT},
     render::Canvas,
     Color, Context, Effect, Shape, ShapeState, Slide,
 };
 
 #[derive(Clone)]
-#[repr(C)]
 pub struct ShapeConstState {
     pub x: f32,
     pub y: f32,
     pub w: f32,
     pub h: f32,
     pub color: Color,
+    pub hide: bool,
 }
 
 #[derive(Clone, Default)]
@@ -64,6 +64,7 @@ pub struct BasicTimeline {
 pub struct Presentation {
     pub states_dyn: DoubleFilter,
     pub states_const: Vec<ShapeConstState>,
+    pub trigger_update: Filter,
     pub timeline: BasicTimeline,
     pub target: (f32, f32),
     pub width: f32,
@@ -76,17 +77,27 @@ impl Presentation {
         slide.shapes.sort_by_key(|s| s.1.z());
         let total_size = slide.shapes.iter().map(|e| e.1.size()).sum();
         let mut refs = vec![0; slide.shapes.len()];
+        let mut trigger_update = Filter::new(total_size);
         let mut shapes_dyn = DoubleFilter::new(total_size);
         let mut shapes_const = Vec::with_capacity(total_size);
         for (referer_id, (id, shape)) in slide.shapes.into_iter().rev().enumerate() {
             match shape {
                 Shape::Shape {
                     state: ShapeState { x, y, w, h, color },
+                    name,
                     ..
                 } => {
                     refs[id] = referer_id;
-                    shapes_dyn.set(referer_id, true, target == (x, y));
-                    shapes_const.push(ShapeConstState { color, x, y, w, h });
+                    trigger_update.write(referer_id, name.contains("UPDATE"));
+                    shapes_dyn.set(referer_id, Some(true), Some(target == (x, y)));
+                    shapes_const.push(ShapeConstState {
+                        color,
+                        x,
+                        y,
+                        w,
+                        h,
+                        hide: name.contains("HIDE"),
+                    });
                 }
                 Shape::Group { .. } => unimplemented!("groups"),
             };
@@ -99,19 +110,29 @@ impl Presentation {
             .chain([&slide.timeline.main_context])
             .map(|c| c.animations.len())
             .sum::<usize>();
+        let mut firsts = vec![true; total_size];
         let mut main_context = slide.timeline.main_context;
         let main_context = init_context(
             &mut main_context,
             &refs,
+            &mut firsts,
             &mut shapes_dyn,
             &mut shapes_const,
             target,
         );
         let mut contexts = vec![BasicContext::default(); total_size];
-        for (id, mut context) in slide.timeline.contexts.into_iter().enumerate() {
+        let mut sorted_contexts = slide
+            .timeline
+            .contexts
+            .into_iter()
+            .enumerate()
+            .collect::<Vec<_>>();
+        sorted_contexts.sort_by_key(|c| c.1.prio);
+        for (id, mut context) in sorted_contexts {
             contexts[refs[id]] = init_context(
                 &mut context,
                 &refs,
+                &mut firsts,
                 &mut shapes_dyn,
                 &mut shapes_const,
                 target,
@@ -129,6 +150,7 @@ impl Presentation {
                 main_context,
                 contexts,
             },
+            trigger_update,
             states_dyn: shapes_dyn,
             states_const: shapes_const,
             width: slide.width,
@@ -157,6 +179,17 @@ impl fmt::Debug for Presentation {
 }
 
 impl Presentation {
+    pub fn stats(&self) -> (usize, usize, usize) {
+        let mut nt = 0;
+        let mut nv = 0;
+        let mut nw = 0;
+        for (t, v) in &self.states_dyn.cells {
+            nt += t.count_ones() as usize;
+            nv += v.count_ones() as usize;
+            nw += (t & v).count_ones() as usize;
+        }
+        (nt, nv, nw)
+    }
     pub fn under(&mut self, x: f32, y: f32) -> Option<usize> {
         if self.target == (x, y) {
             return self.states_dyn.last();
@@ -181,7 +214,7 @@ impl Presentation {
         None
     }
 
-    pub fn click(&mut self, x: f32, y: f32) {
+    pub fn click(&mut self, x: f32, y: f32) -> Result<bool, ()> {
         let (target, context) = match self.under(x, y) {
             Some(referer) => {
                 let context = &mut self.timeline.contexts[referer];
@@ -195,7 +228,7 @@ impl Presentation {
         };
         context.head = if context.head == context.animations.len() {
             if target.is_none() {
-                exit(1);
+                return Err(());
             }
             1
         } else {
@@ -208,6 +241,7 @@ impl Presentation {
             cell.1 |= animation.targeting.set;
             cell.1 &= !animation.targeting.unset;
         }
+        Ok(target.is_none_or(|s| self.trigger_update.get(s)))
     }
 
     pub fn render(&self, scale: f32, background: Color) -> Canvas<Color> {
@@ -217,7 +251,17 @@ impl Presentation {
         for i in 0..self.states_const.len() {
             let (visible, targeted) = self.states_dyn.get(i);
             if visible {
-                let ShapeConstState { color, x, y, w, h } = self.states_const[i];
+                let ShapeConstState {
+                    color,
+                    x,
+                    y,
+                    w,
+                    h,
+                    hide,
+                } = self.states_const[i];
+                if hide {
+                    continue;
+                }
                 let (x, y) = if targeted { self.target } else { (x, y) };
                 let x = (x * scale + 0.5) as isize;
                 let y = (y * scale + 0.5) as isize;
@@ -233,6 +277,7 @@ impl Presentation {
 pub fn init_context(
     context: &mut Context,
     refs: &[usize],
+    firsts: &mut [bool],
     shapes_dyn: &mut DoubleFilter,
     shapes_const: &mut [ShapeConstState],
     target_xy: (f32, f32),
@@ -290,6 +335,10 @@ pub fn init_context(
                 }
             }
         }
+        if firsts[target] && animation.effect.is_entr() {
+            shapes_dyn.set(target, Some(false), None);
+        }
+        firsts[target] = false;
     }
     let sequence = cells.into_values().collect::<Vec<_>>();
     animations.push(sequence);

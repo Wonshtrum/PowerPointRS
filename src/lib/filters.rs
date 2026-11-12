@@ -21,6 +21,14 @@ impl Filter {
         self.cells[index] & (1 << (n & CELL_MASK)) != 0
     }
     #[inline(always)]
+    pub fn write(&mut self, n: usize, v: bool) {
+        if v {
+            self.set(n);
+        } else {
+            self.unset(n);
+        }
+    }
+    #[inline(always)]
     pub fn set(&mut self, n: usize) {
         let index = n >> CELL_SHIFT;
         self.cells[index] |= 1 << (n & CELL_MASK);
@@ -66,20 +74,24 @@ impl DoubleFilter {
         (cell.0 & sub_index != 0, cell.1 & sub_index != 0)
     }
     #[inline(always)]
-    pub fn set(&mut self, n: usize, first: bool, second: bool) {
+    pub fn set(&mut self, n: usize, first: Option<bool>, second: Option<bool>) {
         let index = n >> CELL_SHIFT;
         let set_mask = 1 << (n & CELL_MASK);
         let unset_mask = !set_mask;
         let cell = &mut self.cells[index];
-        if first {
-            cell.0 |= set_mask;
-        } else {
-            cell.0 &= unset_mask;
+        if let Some(first) = first {
+            if first {
+                cell.0 |= set_mask;
+            } else {
+                cell.0 &= unset_mask;
+            }
         }
-        if second {
-            cell.1 |= set_mask;
-        } else {
-            cell.1 &= unset_mask;
+        if let Some(second) = second {
+            if second {
+                cell.1 |= set_mask;
+            } else {
+                cell.1 &= unset_mask;
+            }
         }
     }
 

@@ -266,6 +266,13 @@ impl Effect {
             Effect::SlideOut { .. } => Preset::Exit(0, 0),
         }
     }
+
+    fn is_entr(&self) -> bool {
+        match self {
+            Effect::Appear | Effect::SlideIn { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 pub enum MacroEffect {
@@ -346,12 +353,14 @@ macro_rules! anim {
 
 #[derive(Clone, Default, Debug)]
 pub struct Context {
+    pub prio: usize,
     pub head: usize,
     pub animations: Vec<Animation>,
 }
 
 #[derive(Clone, Default, Debug)]
 pub struct Timeline {
+    pub prio: usize,
     pub main_context: Context,
     pub contexts: Vec<Context>,
 }
@@ -369,6 +378,10 @@ impl Timeline {
                 let length = self.contexts.len();
                 for _ in length..(index + 1) {
                     self.contexts.push(Context::default())
+                }
+                if self.contexts[index].prio == 0 {
+                    self.prio += 1;
+                    self.contexts[index].prio = self.prio;
                 }
                 self.contexts[index].animations.push(animation);
             }

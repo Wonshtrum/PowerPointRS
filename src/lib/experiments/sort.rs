@@ -57,7 +57,7 @@ pub fn sort() -> Slide {
     let mut cc = [Referer::Shape(0); N];
     for i in 0..N {
         let x = ox + W * i as f32;
-        let c = shape!(@s, x, oy, W, W, z=(-2));
+        let c = shape!(@s, x, oy, W, W, z=(-2), n="UPDATE");
         cc[i] = c;
         anim!(@s, c => Place, on=c);
         for j in 0..N {
@@ -68,9 +68,9 @@ pub fn sort() -> Slide {
             if i != j {
                 anim!(@s, get => Disappear);
             }
-            // if i == 0 {
-            //     anim!(@S, s => Disappear);
-            // }
+            if i == 0 {
+                anim!(@s, set => Disappear);
+            }
             anim!(@s, set => Appear, on=values[j].0);
             anim!(@s, get => Appear, on=set);
             anim!(@s, values[j].0 => Appear, on=get);
@@ -95,7 +95,7 @@ pub fn sort() -> Slide {
         }
     }
 
-    let stop = shape!(@s, TX, TY, W, W, c=(255, 0, 0));
+    let stop = shape!(@s, TX, TY, W, W, c=(255, 0, 0), n="UPDATE");
     let shift = shape!(@s, TX, TY, W, W, z=(N*2+1));
     let run = shape!(@s, TX, TY, W, W, z=(N*2+2), c=(0, 255, 0));
     for i in 0..(N - 1) {

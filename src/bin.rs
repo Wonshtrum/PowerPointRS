@@ -13,7 +13,6 @@ fn main() {
     let width = slide.width;
     let mut presentation = MinimalPresentation::from(slide, (0., 20.));
     // let mut presentation = BasicPresentation::from(slide);
-    let start = Instant::now();
 
     let clicks = [
         // trigger main
@@ -28,12 +27,12 @@ fn main() {
         (width, 10.),
     ];
     for (x, y) in clicks {
-        presentation.click(x, y);
+        presentation.click(x, y).unwrap();
     }
 
-    // presentation.update_filter(0., 20.);
+    let start = Instant::now();
     for _ in 0..26500 {
-        presentation.click(0., 20.);
+        presentation.click(0., 20.).unwrap();
     }
     println!("{:?}", start.elapsed());
     println!("{}", presentation.render(1., Color::WHITE));

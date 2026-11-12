@@ -64,6 +64,7 @@ pub struct CacheData {
 pub struct Presentation {
     pub states_dyn: Vec<ShapeDynState>,
     pub states_const: Vec<ShapeConstState>,
+    pub trigger_update: Vec<bool>,
     pub referers: Vec<Referer>,
     pub timeline: Timeline,
     pub cache_hit: CacheHit,
@@ -82,39 +83,28 @@ impl From<Slide> for Presentation {
         let mut shapes_dyn = Vec::with_capacity(total_size);
         let mut shapes_const = Vec::with_capacity(total_size);
         let mut shapes_groups = Vec::with_capacity(total_size);
+        let mut trigger_update = Vec::with_capacity(total_size);
         let mut referer_id = 0;
         for (id, shape) in slide.shapes.into_iter().rev() {
             let group_size = shape.size();
             let (mut queue, referer) = match shape {
-                Shape::Shape {
-                    state: ShapeState { x, y, w, h, color },
-                    ..
-                } => {
-                    let referer = Referer::Shape(referer_id);
-                    refs[id] = referer;
-                    shapes_dyn.push(ShapeDynState {
-                        x,
-                        y,
-                        w,
-                        h,
-                        visibility: Visibility::Unknown,
-                    });
-                    shapes_const.push(ShapeConstState { color, x, y });
-                    shapes_groups.push(referer);
-                    referer_id += 1;
-                    continue;
-                }
                 Shape::Group { mut shapes, .. } => {
                     let referer = Referer::Group(referer_id, group_size);
                     shapes.sort_by_key(|a| Reverse(a.z()));
                     refs[id] = referer;
                     (shapes, referer)
                 }
+                shape => {
+                    let referer = Referer::Shape(referer_id);
+                    refs[id] = referer;
+                    (vec![shape], referer)
+                }
             };
             while let Some(shape) = queue.pop() {
                 match shape {
                     Shape::Shape {
                         state: ShapeState { x, y, w, h, color },
+                        name,
                         ..
                     } => {
                         shapes_dyn.push(ShapeDynState {
@@ -126,6 +116,7 @@ impl From<Slide> for Presentation {
                         });
                         shapes_const.push(ShapeConstState { color, x, y });
                         shapes_groups.push(referer);
+                        trigger_update.push(name.contains("UPDATE"));
                         referer_id += 1;
                     }
                     Shape::Group { mut shapes, .. } => {
@@ -139,13 +130,24 @@ impl From<Slide> for Presentation {
         let mut main_context = slide.timeline.main_context;
         init_context(&mut main_context, &refs, &mut shapes_dyn, &mut shapes_const);
         let mut contexts = vec![Context::default(); total_size];
-        for (id, mut context) in slide.timeline.contexts.into_iter().enumerate() {
+        let mut sorted_contexts = slide
+            .timeline
+            .contexts
+            .into_iter()
+            .enumerate()
+            .collect::<Vec<_>>();
+        sorted_contexts.sort_by_key(|c| c.1.prio);
+        for (id, mut context) in sorted_contexts {
             init_context(&mut context, &refs, &mut shapes_dyn, &mut shapes_const);
             contexts[refs[id].index()] = context;
         }
 
+        if !trigger_update.iter().any(|x| *x) {
+            trigger_update.iter_mut().for_each(|x| *x = true);
+        }
         Presentation {
             timeline: Timeline {
+                prio: 0,
                 main_context,
                 contexts,
             },
@@ -161,6 +163,7 @@ impl From<Slide> for Presentation {
             },
             states_dyn: shapes_dyn,
             states_const: shapes_const,
+            trigger_update,
             referers: shapes_groups,
             width: slide.width,
             height: slide.height,
@@ -241,7 +244,7 @@ impl Presentation {
         self.filter.last().map(|index| self.referers[index])
     }
 
-    pub fn click(&mut self, x: f32, y: f32) -> Result<(), ()> {
+    pub fn click(&mut self, x: f32, y: f32) -> Result<bool, ()> {
         self.cache_data.update = true;
         self.cache_data.start = 0;
         self.cache_data.end = self.states_dyn.len() - 1;
@@ -281,7 +284,7 @@ impl Presentation {
                 );
             }
         }
-        Ok(())
+        Ok(target.is_none_or(|s| self.trigger_update[s.index()]))
     }
 
     pub fn click_cache(&mut self, x: f32, y: f32) -> Result<(), ()> {
